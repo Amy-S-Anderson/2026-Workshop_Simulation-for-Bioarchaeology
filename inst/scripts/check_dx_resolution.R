@@ -7,7 +7,7 @@
 # Also tests both orderings of operations (lesions first vs mortality first)
 # to verify correctness.
 #
-# Usage: source("check_dx_resolution.R") or run interactively
+# Usage: source("inst/scripts/check_dx_resolution.R")
 
 library(demohaz)
 devtools::load_all()  # Load persephone from source
