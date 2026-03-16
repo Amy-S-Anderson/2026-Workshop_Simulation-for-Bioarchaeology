@@ -29,6 +29,9 @@ inst/doc/*.R
 .DS_Store
 Thumbs.db
 
+# Claude Code
+.claude/settings.local.json
+
 # Compiled vignettes
 vignettes/*.html
 vignettes/*.pdf
