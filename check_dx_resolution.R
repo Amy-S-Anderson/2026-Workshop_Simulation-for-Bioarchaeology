@@ -17,7 +17,7 @@ devtools::load_all()  # Load persephone from source
 # -----------------------------------------------------------------------------
 
 N <- 80000
-dx_values <- c(0.01, 0.1, 0.5, 1.0)  # dx values to test
+dx_values <- c(0.001, 0.01, 0.1, 1.0)  # dx values to test
 orders <- c("lesions_first", "mortality_first")  # operation orderings to test
 dx_rej <- 0.001   # Rejection sampler grid spacing (reference)
 xmax <- 120       # Maximum age
