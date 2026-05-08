@@ -13,6 +13,7 @@ experience different mortality risk depending on lesion status.
 ## Setup
 
 ``` r
+
 library(persephone)
 library(dplyr)
 library(ggplot2)
@@ -35,6 +36,7 @@ This produces simulated data on lesion status and age at death for
 200,000 individuals total.
 
 ``` r
+
 nreps <- 100
 params <- get_default_params()
 
@@ -61,6 +63,7 @@ results_rmr2 <- run_scenario(params, rmr = 2, nreps = nreps)
 ## Combine and Prepare Data
 
 ``` r
+
 # Cemetery data (individual-level outcomes)
 sim_data <- bind_rows(
   results_rmr1$cemetery %>% mutate(relative_mortality_risk = 1),
@@ -95,6 +98,7 @@ sim_survivors <- bind_rows(
 ### Preview: Scenario 1 (Risk-free)
 
 ``` r
+
 head(sim_data %>% filter(scenario == "Risk-free") %>% select(-Age_Interval), n = 10)
 ```
 
@@ -124,6 +128,7 @@ head(sim_data %>% filter(scenario == "Risk-free") %>% select(-Age_Interval), n =
 ### Preview: Scenario 2 (Risk-doubled)
 
 ``` r
+
 head(sim_data %>% filter(scenario == "Risk-doubled") %>% select(-Age_Interval), n = 10)
 ```
 
@@ -153,6 +158,7 @@ head(sim_data %>% filter(scenario == "Risk-doubled") %>% select(-Age_Interval), 
 ### Preview: Survivor data
 
 ``` r
+
 head(sim_survivors %>% select(-rep))
 ```
 
@@ -175,6 +181,7 @@ individuals binned into age categories used for age-at-death estimates
 in archaeological skeletal series.
 
 ``` r
+
 plot_colors <- c("black", "magenta")
 
 plot_theme <- theme_bw(base_size = 10) +
@@ -243,6 +250,7 @@ frequency across both scenarios. The x-axis is truncated at 75 to reduce
 stochastic noise from small sample sizes at older ages.
 
 ``` r
+
 linetypes <- c("dashed", "solid")
 
 # Label living vs dead for linetype legend
@@ -329,6 +337,7 @@ shows the high stochasticity at older ages due to diminishing sample
 sizes.
 
 ``` r
+
 S2A <- ggplot(plot_data %>% filter(relative_risk == 1),
               aes(x = Age, y = Lesion_perc)) +
   geom_line(aes(x = interval_midpoint, y = Lesion_Percent,
@@ -385,6 +394,7 @@ Kaplan-Meier survival curves and log-rank tests comparing survival
 between individuals with and without skeletal lesions.
 
 ``` r
+
 # Add required grouping columns for run_survival_analysis
 sim_data$lesion_formation_rate <- params$lesion_formation_rate
 sim_data$mortality <- "CDW5"
@@ -410,6 +420,7 @@ individuals inside the age range in which living individuals can form
 new lesions.
 
 ``` r
+
 surv_linetypes <- c(1342, "solid")
 
 rmr1_survival_curve <- survival_data1$survival_data %>%
@@ -490,6 +501,7 @@ test (p \< 0.05), and median survival times with 95% confidence
 intervals.
 
 ``` r
+
 # Percent of runs with significant log-rank tests
 logrank1_main <- survival_data1$logrank_results %>%
   mutate(significant = if_else(p_value < 0.05, 1, 0)) %>%
@@ -513,30 +525,35 @@ cat("Percent of runs with significant log-rank test (p < 0.05):\n")
     ## Percent of runs with significant log-rank test (p < 0.05):
 
 ``` r
+
 cat("  Risk-free, all ages:", logrank1_main$percent_significant, "%\n")
 ```
 
     ##   Risk-free, all ages: 99 %
 
 ``` r
+
 cat("  Risk-doubled, all ages:", logrank2_main$percent_significant, "%\n")
 ```
 
     ##   Risk-doubled, all ages: 88 %
 
 ``` r
+
 cat("  Risk-free, ages 10+:", logrank1_adults$percent_significant, "%\n")
 ```
 
     ##   Risk-free, ages 10+: 7 %
 
 ``` r
+
 cat("  Risk-doubled, ages 10+:", logrank2_adults$percent_significant, "%\n")
 ```
 
     ##   Risk-doubled, ages 10+: 100 %
 
 ``` r
+
 # Median survival times with 95% CI
 compute_median_table <- function(data, scenario_label, ages_label) {
   data %>%
@@ -585,4 +602,4 @@ knitr::kable(survival_time_table, caption = "Table 1. Median survival time and 9
 | Risk-doubled | 15+      | Absent          | 54 (51.7, 57)                 |
 | Risk-doubled | 15+      | Present         | 39.5 (36, 43)                 |
 
-Table 1. Median survival time and 95% CI.
+Table 1. Median survival time and 95% CI. {.table}

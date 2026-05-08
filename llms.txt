@@ -8,6 +8,7 @@ in archaeological populations, based on the Usher3 illness-death model.
 Install from GitHub using `devtools`:
 
 ``` r
+
 # Install devtools if needed
 install.packages("devtools")
 
@@ -25,6 +26,7 @@ devtools::install_github("Amy-S-Anderson/persephone")
 ### Building the Package
 
 ``` r
+
 # Generate documentation from roxygen2 comments
 devtools::document()
 
@@ -38,6 +40,7 @@ devtools::check()
 ### Running Tests
 
 ``` r
+
 # Run all tests
 devtools::test()
 
@@ -48,6 +51,7 @@ testthat::test_file("tests/testthat/test-estimation-error.R")
 ### Loading for Development
 
 ``` r
+
 # Load package without installing (for interactive development)
 devtools::load_all()
 ```
@@ -55,6 +59,7 @@ devtools::load_all()
 ## Usage
 
 ``` r
+
 library(persephone)
 
 # Run a simulation
