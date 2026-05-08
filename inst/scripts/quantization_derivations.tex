@@ -1,0 +1,269 @@
+\documentclass{article}
+\usepackage{amsmath,amssymb}
+
+\begin{document}
+
+\title{One-Step Linearization Error in a Multiplicative Illness--Death Model}
+\author{}
+\date{}
+\maketitle
+
+\section*{Setup and Notation}
+
+Consider a continuous-time multiplicative illness--death model evaluated over a short age interval. To keep the algebra compact, we use local one-step notation \((x,h,p,\mu,k_1,k_2)\). 
+
+Let \(h=dx\) be the age-step width, and let \(p\) be the proportion of individuals already in the lesioned state among those alive at age \(x\). Over the short interval \([x,x+h]\), we treat the hazards as constant: \(\mu\) is the baseline mortality hazard, \(k_1\) is the well-to-lesioned hazard, and \(k_2\mu\) is the mortality hazard for lesioned individuals.
+
+The system consists of three states:
+\[
+W=\text{well and alive},\qquad
+L=\text{lesioned and alive},\qquad
+D=\text{dead}.
+\]
+On the interval \([x,x+h]\), the constant transition hazards are:
+\[
+W\to L \text{ at rate } k_1,\qquad
+W\to D \text{ at rate } \mu,\qquad
+L\to D \text{ at rate } k_2\mu.
+\]
+Let \(y\in[0,h]\) denote within-interval time, so \(y=0\) corresponds to age \(x\) and \(y=h\) corresponds to age \(x+h\). Because the model is continuous in time, simultaneous events have probability zero.
+
+By \emph{linearization error}, we mean the one-step difference between the exact continuous-time update over \([x,x+h]\) and the split first-order update:
+\[
+\text{lesion step first}
+\quad \longrightarrow \quad
+\text{mortality step second}.
+\]
+
+\section*{Exact one-step transition probabilities}
+
+For an individual who is well at age \(x\), define the six bookkeeping probabilities:
+\begin{align*}
+A_1 &= \Pr(W\to W), &
+A_2 &= \Pr(W\to D \text{ without lesion}), \\
+A_3 &= \Pr(W\to L \text{ and survive}), &
+A_4 &= \Pr(W\to L \text{ and then die}), \\
+B_1 &= \Pr(L\to L), &
+B_2 &= \Pr(L\to D).
+\end{align*}
+Set
+\[
+\lambda := k_1+\mu,\qquad
+\delta := k_1+(1-k_2)\mu,
+\]
+and define the auxiliary function
+\[
+\psi(h;\delta):=
+\begin{cases}
+\dfrac{1-e^{-\delta h}}{\delta}, & \delta\neq 0,\\[1em]
+h, & \delta=0.
+\end{cases}
+\]
+The exact continuous-time probabilities are formed by integrating over the possible event times. For trajectories with multiple jumps within the interval, such as \(A_4\) (well to lesioned to dead), this naturally forms a double integral over the lesion time \(y\) and the subsequent death time \(z\):
+\begin{align}
+A_1 &= e^{-\lambda h}, \label{eq:A1_exact}\\
+A_2 &= \int_0^h e^{-\lambda y}\mu\,dy
+    = \frac{\mu}{\lambda}\bigl(1-e^{-\lambda h}\bigr), \label{eq:A2_exact}\\
+A_3 &= \int_0^h e^{-\lambda y}k_1 e^{-k_2\mu(h-y)}\,dy
+    = k_1 e^{-k_2\mu h}\psi(h;\delta), \label{eq:A3_exact}\\
+A_4 &= \int_0^h \int_y^h \bigl(e^{-\lambda y}k_1\bigr) \bigl(e^{-k_2\mu(z-y)}k_2\mu\bigr)\,dz\,dy \notag \\
+    &= \int_0^h e^{-\lambda y}k_1\bigl(1-e^{-k_2\mu(h-y)}\bigr)\,dy \notag \\
+    &= \frac{k_1}{\lambda}\bigl(1-e^{-\lambda h}\bigr)
+      - k_1 e^{-k_2\mu h}\psi(h;\delta), \label{eq:A4_exact}\\
+B_1 &= e^{-k_2\mu h}, \label{eq:B1_exact}\\
+B_2 &= \int_0^h e^{-k_2\mu y}k_2\mu\,dy = 1-e^{-k_2\mu h}. \label{eq:B2_exact}
+\end{align}
+These probabilities satisfy the conservation laws:
+\[
+A_1+A_2+A_3+A_4=1,\qquad
+B_1+B_2=1.
+\]
+
+\section*{Exact update of the proportion lesioned among survivors}
+
+At age \(x+h\), the exact proportion lesioned among survivors is
+\[
+p^\ast(h)
+=
+\frac{\text{lesioned survivors at }x+h}
+{\text{all survivors at }x+h}.
+\]
+The lesioned survivors are those who were already lesioned and survived, plus those who were well, acquired a lesion, and survived. Hence:
+\[
+L^\ast(h):=pB_1+(1-p)A_3
+= e^{-k_2\mu h}\bigl[p+(1-p)k_1\psi(h;\delta)\bigr].
+\]
+All survivors are:
+\[
+S^\ast(h):=pB_1+(1-p)(A_1+A_3)
+= e^{-k_2\mu h}\bigl[p+(1-p)\bigl(e^{-\delta h}+k_1\psi(h;\delta)\bigr)\bigr].
+\]
+Therefore,
+\begin{equation}
+\label{eq:pexact}
+p^\ast(h)
+=
+\frac{p+(1-p)k_1\psi(h;\delta)}
+{p+(1-p)\bigl(e^{-\delta h}+k_1\psi(h;\delta)\bigr)}.
+\end{equation}
+When \(\delta=0\), this reduces to
+\[
+p^\ast(h)
+=
+\frac{p+(1-p)k_1 h}{1+(1-p)k_1 h}.
+\]
+
+\section*{Quantized (linearized) one-step update}
+
+Now consider the split approximation used in a discrete-time algorithmic update. Over the same interval \([x,x+h]\), we apply the events sequentially:
+
+\begin{enumerate}
+\item among individuals in \(W\), assign lesion acquisition with probability \(k_1 h\);
+\item after that update, apply mortality with probability \(\mu h\) to those without lesions and \(k_2\mu h\) to those with lesions.
+\end{enumerate}
+
+Assuming \(h\) is small enough that these first-order probabilities lie in \([0,1]\), the resulting bookkeeping probabilities are:
+\begin{align}
+\widetilde A_1 &= (1-k_1 h)(1-\mu h), \label{eq:A1_tilde}\\
+\widetilde A_2 &= (1-k_1 h)\mu h, \label{eq:A2_tilde}\\
+\widetilde A_3 &= k_1 h(1-k_2\mu h), \label{eq:A3_tilde}\\
+\widetilde A_4 &= k_1k_2\mu h^2, \label{eq:A4_tilde}\\
+\widetilde B_1 &= 1-k_2\mu h, \label{eq:B1_tilde}\\
+\widetilde B_2 &= k_2\mu h. \label{eq:B2_tilde}
+\end{align}
+These also sum to one within each starting state.
+
+The corresponding number of lesioned survivors is:
+\[
+\widetilde L(h)
+:= p\widetilde B_1 + (1-p)\widetilde A_3
+= \bigl[p+(1-p)k_1 h\bigr](1-k_2\mu h),
+\]
+and the total number of survivors is:
+\begin{align*}
+\widetilde S(h)
+&:= p\widetilde B_1 + (1-p)(\widetilde A_1+\widetilde A_3) \\
+&= p(1-k_2\mu h)
+ + (1-p)\bigl[(1-k_1 h)(1-\mu h)+k_1 h(1-k_2\mu h)\bigr] \\
+&= 1-\mu\bigl[(1-p)+pk_2\bigr]h
+   +(1-p)k_1\mu(1-k_2)h^2.
+\end{align*}
+Thus, the quantized update of the proportion lesioned among survivors is:
+\begin{equation}
+\label{eq:pq}
+\widetilde p(h)
+=
+\frac{\bigl[p+(1-p)k_1 h\bigr](1-k_2\mu h)}
+{1-\mu\bigl[(1-p)+pk_2\bigr]h +(1-p)k_1\mu(1-k_2)h^2}.
+\end{equation}
+
+\section*{Exact one-step error}
+
+Define the one-step linearization error by:
+\[
+E_p(h):=\widetilde p(h)-p^\ast(h).
+\]
+Combining \eqref{eq:pexact} and \eqref{eq:pq} gives the exact closed-form expression:
+\begin{equation}
+\label{eq:exact_error}
+E_p(h)
+=
+\frac{\bigl[p+(1-p)k_1 h\bigr](1-k_2\mu h)}
+{1-\mu\bigl[(1-p)+pk_2\bigr]h +(1-p)k_1\mu(1-k_2)h^2}
+-
+\frac{p+(1-p)k_1\psi(h;\delta)}
+{p+(1-p)\bigl(e^{-\delta h}+k_1\psi(h;\delta)\bigr)}.
+\end{equation}
+
+Both the exact and quantized maps agree to first order:
+\[
+p^\ast(h)
+=
+p+(1-p)\bigl[k_1-p(k_2-1)\mu\bigr]h+O(h^2),
+\]
+\[
+\widetilde p(h)
+=
+p+(1-p)\bigl[k_1-p(k_2-1)\mu\bigr]h+O(h^2),
+\]
+so the local bias begins at order \(h^2\).
+
+To extract the second-order term, note that:
+\[
+\widetilde A_1-A_1
+= -\frac{1}{2}(k_1^2+\mu^2)h^2 + O(h^3),
+\]
+\[
+\widetilde A_3-A_3
+= \frac{1}{2}k_1\bigl[k_1+(1-k_2)\mu\bigr]h^2 + O(h^3),
+\]
+\[
+\widetilde B_1-B_1
+= -\frac{1}{2}(k_2\mu)^2 h^2 + O(h^3).
+\]
+Hence,
+\begin{align*}
+\Delta L(h)
+&:= \widetilde L(h)-L^\ast(h) \\
+&= (1-p)(\widetilde A_3-A_3)+p(\widetilde B_1-B_1) \\
+&= \frac{h^2}{2}
+\left[
+(1-p)k_1\bigl(k_1+(1-k_2)\mu\bigr)-p(k_2\mu)^2
+\right]
++ O(h^3),
+\end{align*}
+and
+\begin{align*}
+\Delta S(h)
+&:= \widetilde S(h)-S^\ast(h) \\
+&= (1-p)\bigl((\widetilde A_1+\widetilde A_3)-(A_1+A_3)\bigr)
+   + p(\widetilde B_1-B_1) \\
+&= -\frac{h^2}{2}
+\left[
+(1-p)\mu\bigl(\mu+k_1(k_2-1)\bigr)+p(k_2\mu)^2
+\right]
++ O(h^3).
+\end{align*}
+Since
+\[
+\widetilde p(h)-p^\ast(h)
+=
+\frac{\Delta L(h)S^\ast(h)-L^\ast(h)\Delta S(h)}
+{S^\ast(h)\bigl(S^\ast(h)+\Delta S(h)\bigr)},
+\]
+and \(L^\ast(h)=p+O(h)\), \(S^\ast(h)=1+O(h)\), it follows that
+\[
+E_p(h)=\Delta L(h)-p\,\Delta S(h)+O(h^3).
+\]
+Therefore, the leading one-step error is:
+\begin{equation}
+\label{eq:main_error}
+E_p(h)
+=
+\frac{1-p}{2}
+\left[
+k_1^2-(1-p)k_1(k_2-1)\mu-p(k_2^2-1)\mu^2
+\right]h^2
++ O(h^3).
+\end{equation}
+
+\section*{Interpretation}
+
+Equation \eqref{eq:main_error} gives the local bias in the propagated proportion lesioned among survivors. Several boundary checks are immediate:
+\begin{itemize}
+\item If \(p=1\), everyone is already lesioned and both updates keep the proportion equal to \(1\), so \(E_p(h)=0\).
+\item If \(k_2=1\), lesion status does not affect mortality and the error reduces to
+      \[
+      E_p(h)=\frac{1}{2}(1-p)k_1^2 h^2 + O(h^3).
+      \]
+\item If \(p=0\), then
+      \[
+      E_p(h)=\frac{1}{2}k_1\bigl[k_1-(k_2-1)\mu\bigr]h^2 + O(h^3).
+      \]
+\end{itemize}
+
+The term involving \(k_1(k_2-1)\mu\) encapsulates the within-interval ordering error. In the exact model, an individual who acquires a lesion at time \(y\) experiences the elevated mortality hazard \(k_2\mu\) only over the remaining time \(h-y\). The quantized update instead treats newly lesioned individuals as if they carried the elevated hazard over the full duration of the step. This structural difference is the primary reason the bias scales to the second order in the step width. 
+
+If a specific model incorporates an age-restricted window for lesion formation, the same calculation applies locally on any interval where the hazards are frozen. After the lesion-formation window ends, one simply sets \(k_1=0\) in the formulas above.
+
+\end{document}
