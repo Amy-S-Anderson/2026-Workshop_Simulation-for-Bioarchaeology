@@ -23,7 +23,7 @@ create_cohort <- function(cohort_size) {
              dead = FALSE,
              was_deposited = FALSE,
              in_sample = TRUE
-             )
+  )
 }
 
 #' Age up all living agents to the current timestep
@@ -48,37 +48,78 @@ compute_siler_risk <- function(k, mortality_regime) {
     mortality_regime$a3 * exp(mortality_regime$b3 * k)
 }
 
-#' Roll for lesion formation for a single agent
+#' Vectorized lesion formation across all living agents
+#'
+#' Replaces the per-agent form_lesion() loop with a single vectorized draw.
+#' Each living agent gets its own uniform draw; conditions are evaluated
+#' element-wise so individual-level heterogeneity is preserved.
+#'
 #' @param cohort Population data frame
-#' @param i Index of the agent
+#' @param Alive Integer vector of row indices for living agents
 #' @param formation_window_opens Age at which lesions can start forming
 #' @param formation_window_closes Age at which lesions stop forming
 #' @param lesion_formation_rate Annual probability of lesion formation
 #' @return Updated cohort data frame
 #' @keywords internal
-form_lesion <- function(cohort, i, formation_window_opens, formation_window_closes, lesion_formation_rate) {
-  Stress <- runif(1, 0, 1)
-  cohort$lesion[i] <- ifelse(cohort$age[i] >= formation_window_opens &
-                               cohort$age[i] <= formation_window_closes &
-                               Stress <= lesion_formation_rate, 1, cohort$lesion[i])
+form_lesions <- function(cohort, Alive,
+                             formation_window_opens,
+                             formation_window_closes,
+                             lesion_formation_rate) {
+  # One draw per living agent
+  stress <- runif(length(Alive), 0, 1)
+  
+  ages   <- cohort$age[Alive]
+  in_window <- ages >= formation_window_opens & ages <= formation_window_closes
+  
+  # An agent acquires a lesion if: in the formation window, stress roll passes,
+  # AND it does not already have a lesion (pmax preserves previously acquired lesions)
+  new_lesion <- as.integer(in_window & stress <= lesion_formation_rate)
+  cohort$lesion[Alive] <- pmax(cohort$lesion[Alive], new_lesion)
+  
   cohort
 }
 
-#' Roll for death for a single agent (v1 implementation)
+#' Vectorized mortality across all living agents
+#'
+#'
 #' @param cohort Population data frame
-#' @param i Index of the agent
-#' @param age_based_risk Baseline Siler mortality risk at current age
+#' @param Alive Integer vector of row indices for living agents
+#' @param age_based_risk Baseline Siler mortality risk at current age (scalar)
 #' @param mortality_risk_type One of "proportional", "time_decreasing", "time_increasing"
 #' @param relative_mortality_risk Multiplier for lesion-bearing individuals
 #' @return Updated cohort data frame
 #' @keywords internal
-apply_mortality_v1 <- function(cohort, i, age_based_risk, mortality_risk_type, relative_mortality_risk) {
-  death_dice <- runif(1, 0, 1)
-  cohort$dead[i] <- ifelse(cohort$lesion[i] == 0 & death_dice < age_based_risk, TRUE,
-                           ifelse(cohort$lesion[i] == 1 & mortality_risk_type == "proportional" & death_dice < age_based_risk * relative_mortality_risk, TRUE,
-                                  ifelse(cohort$lesion[i] == 1 & mortality_risk_type == "time_decreasing" & death_dice < age_based_risk * relative_mortality_risk / ((cohort$age[i] / 10) + relative_mortality_risk), TRUE,
-                                         ifelse(cohort$lesion[i] == 1 & mortality_risk_type == "time_increasing" & death_dice < age_based_risk * ((cohort$age[i] / 10) + relative_mortality_risk) / relative_mortality_risk, TRUE,
-                                                cohort$dead[i]))))
+apply_mortality <- function(cohort, Alive,
+                                age_based_risk,
+                                mortality_risk_type,
+                                relative_mortality_risk) {
+  death_dice <- runif(length(Alive), 0, 1)
+  
+  ages   <- cohort$age[Alive]
+  lesion <- cohort$lesion[Alive]
+  
+  # Compute the effective death threshold for each agent.
+  # case_when() evaluates conditions row-wise (element-wise on vectors), so
+  # each agent follows exactly one branch — logically equivalent to the
+  # original nested ifelse() but readable and easy to extend.
+  threshold <- dplyr::case_when(
+    lesion == 0 ~
+      age_based_risk,
+    
+    lesion == 1 & mortality_risk_type == "proportional" ~
+      age_based_risk * relative_mortality_risk,
+    
+    lesion == 1 & mortality_risk_type == "time_decreasing" ~
+      age_based_risk * relative_mortality_risk / ((ages / 10) + relative_mortality_risk),
+    
+    lesion == 1 & mortality_risk_type == "time_increasing" ~
+      age_based_risk * ((ages / 10) + relative_mortality_risk) / relative_mortality_risk,
+    
+    .default = age_based_risk   # fallback: treat as no-lesion baseline
+  )
+  
+  cohort$dead[Alive] <- cohort$dead[Alive] | (death_dice < threshold)
+  
   cohort
 }
 
@@ -88,7 +129,7 @@ apply_mortality_v1 <- function(cohort, i, age_based_risk, mortality_risk_type, r
 #' @return One-row data frame with Age, Alive, Lesion, Lesion_perc
 #' @keywords internal
 record_survivors <- function(cohort, k) {
-  n_alive <- sum(!cohort$dead & cohort$age == k)
+  n_alive  <- sum(!cohort$dead & cohort$age == k)
   n_lesion <- sum(!cohort$dead & cohort$lesion == 1 & cohort$age == k)
   data.frame(Age = k,
              Alive = n_alive,
@@ -162,55 +203,68 @@ Simulate_Cemetery <- function(cohort_size,
                               loss_strength = 'no_decay',
                               age_noise = FALSE) {
   cohort <- create_cohort(cohort_size)
-
-  k <- 0 # Initialize time counter
-
-  # set up tables for model output: survivor data
-  Alive_sum <- data.frame(Age = integer(),
-                          Alive = integer(),
-                          Lesion = integer(),
-                          Lesion_perc = numeric())
-
+  
+  k <- 0  # Initialize time counter
+  
+  # Set up table for survivor output
+  survivors <- vector("list", 100)
+  
   # As long as more than 10 people are alive
-  while(sum(!cohort$dead) >= 10){
+  while (sum(!cohort$dead) >= 10) {
     k <- k + 1  # Increment time
     cohort <- age_cohort(cohort, k)
     Alive <- which(!cohort$dead)
-
-    # calculate immediate mortality risk for individuals based on their current age
+    
+    # Baseline Siler mortality risk for this age (scalar — same for all agents)
     age_based_risk <- compute_siler_risk(k, mortality_regime)
-
-    for(i in Alive){
-      cohort <- form_lesion(cohort, i, formation_window_opens, formation_window_closes, lesion_formation_rate)
-      cohort <- apply_mortality_v1(cohort, i, age_based_risk, mortality_risk_type, relative_mortality_risk)
-    }
-
-    # Update summary table for Survivors
-    Alive_sum <- rbind(Alive_sum, record_survivors(cohort, k))
+    
+    # Vectorized lesion formation and mortality across all living agents.
+    # Each agent receives its own independent draw; case_when() dispatches
+    # each agent through the correct mortality branch element-wise.
+    cohort <- form_lesions_vec(cohort, Alive,
+                               formation_window_opens,
+                               formation_window_closes,
+                               lesion_formation_rate)
+    
+    cohort <- apply_mortality_vec(cohort, Alive,
+                                  age_based_risk,
+                                  mortality_risk_type,
+                                  relative_mortality_risk)
+    
+    # Update summary log for survivors
+    survivors[[k]] <- record_survivors(cohort, k)
   }
-
+  
   # Once 10 or fewer people are left alive — they all enter the cemetery
   cohort <- finalize_cemetery(cohort, k)
-
-  # Apply Deposition bias (if any)
-  cohort <- apply_deposition(cohort, deposition_model = 'cutoff', deposition_param = deposition_param, dx = 1)
+  
+  # Apply deposition bias (if any)
+  cohort <- apply_deposition(cohort,
+                             deposition_model = 'cutoff',
+                             deposition_param = deposition_param,
+                             dx = 1)
   cohort$in_sample <- cohort$was_deposited
-
-  # Apply Preservation bias (if any)
+  
+  # Apply preservation bias (if any)
   if (loss_strength != 'no_decay') {
-    a_siler <- c(taphonomy_regime$a1, taphonomy_regime$b1, taphonomy_regime$a2, taphonomy_regime$a3, taphonomy_regime$b3)
+    a_siler <- c(taphonomy_regime$a1, taphonomy_regime$b1,
+                 taphonomy_regime$a2, taphonomy_regime$a3,
+                 taphonomy_regime$b3)
     b_siler <- demohaz::trad_to_demohaz_siler_param(a_siler)
-    cohort <- apply_preservation(cohort, preservation_model = 'siler', preservation_param = b_siler, dx = 1)
+    cohort <- apply_preservation(cohort,
+                                 preservation_model = 'siler',
+                                 preservation_param = b_siler,
+                                 dx = 1)
   }
-
-  # Apply Age Misestimation (if any)
-  if(age_noise) cohort <- apply_estimation_error(cohort)
-
+  
+  # Apply age misestimation (if any)
+  if (age_noise) cohort <- apply_estimation_error(cohort)
+  
   # Remove internal columns before returning
   cohort <- cohort %>% dplyr::select(-"dead")
-
+  
   # Model output
-  output <- list(individual_outcomes = cohort, survivors = Alive_sum)
-
+  output <- list(individual_outcomes = cohort, survivors = do.call(rbind, survivors))
+  
   return(output)
 }
