@@ -102,6 +102,7 @@ apply_mortality <- function(cohort, Alive,
   # case_when() evaluates conditions row-wise (element-wise on vectors), so
   # each agent follows exactly one branch — logically equivalent to the
   # original nested ifelse() but readable and easy to extend.
+  if(length(lesion) > 0){
   threshold <- dplyr::case_when(
     lesion == 0 ~
       age_based_risk,
@@ -117,6 +118,10 @@ apply_mortality <- function(cohort, Alive,
     
     .default = age_based_risk   # fallback: treat as no-lesion baseline
   )
+  } else{
+  threshold = age_based_risk
+    
+  }
   
   cohort$dead[Alive] <- cohort$dead[Alive] | (death_dice < threshold)
   
@@ -126,15 +131,22 @@ apply_mortality <- function(cohort, Alive,
 #' Record survivor snapshot for the current timestep
 #' @param cohort Population data frame
 #' @param k Current timestep
+#' @param lesion_formation_rate Annual rate of lesion formation (NULL if not specified)
 #' @return One-row data frame with Age, Alive, Lesion, Lesion_perc
 #' @keywords internal
-record_survivors <- function(cohort, k) {
+record_survivors <- function(cohort, k, lesion_formation_rate) {
   n_alive  <- sum(!cohort$dead & cohort$age == k)
   n_lesion <- sum(!cohort$dead & cohort$lesion == 1 & cohort$age == k)
-  data.frame(Age = k,
-             Alive = n_alive,
-             Lesion = n_lesion,
-             Lesion_perc = ifelse(n_alive == 0, NA, round(n_lesion / n_alive * 100, 1)))
+  if(is.null(lesion_formation_rate)){
+    data.frame(Age = k,
+               Alive = n_alive)
+  }
+  else{
+    data.frame(Age = k,
+               Alive = n_alive,
+               Lesion = n_lesion,
+               Lesion_perc = ifelse(n_alive == 0, NA, round(n_lesion / n_alive * 100, 1)))
+  }
 }
 
 #' Finalize the cohort into a cemetery
@@ -192,7 +204,7 @@ finalize_cemetery <- function(cohort, k) {
 #'
 #' @export
 Simulate_Cemetery <- function(cohort_size,
-                              lesion_formation_rate,
+                              lesion_formation_rate = NULL,
                               formation_window_opens = 0,
                               formation_window_closes,
                               mortality_risk_type = "proportional",
@@ -204,6 +216,11 @@ Simulate_Cemetery <- function(cohort_size,
                               age_noise = FALSE) {
   cohort <- create_cohort(cohort_size)
   
+  # If lesion_formation_rate is not specified, remove the lesion column from the cohort data frame. 
+  if(is.null(lesion_formation_rate)){
+    cohort <- cohort %>%
+      select(-lesion)
+  }
   k <- 0  # Initialize time counter
   
   # Set up table for survivor output
@@ -221,18 +238,21 @@ Simulate_Cemetery <- function(cohort_size,
     # Vectorized lesion formation and mortality across all living agents.
     # Each agent receives its own independent draw; case_when() dispatches
     # each agent through the correct mortality branch element-wise.
-    cohort <- form_lesions_vec(cohort, Alive,
-                               formation_window_opens,
-                               formation_window_closes,
-                               lesion_formation_rate)
+    if(!is.null(lesion_formation_rate)){
+      cohort <- form_lesions_vec(cohort, Alive,
+                                 formation_window_opens,
+                                 formation_window_closes,
+                                 lesion_formation_rate)
+    }
     
-    cohort <- apply_mortality_vec(cohort, Alive,
+    
+    cohort <- apply_mortality(cohort, Alive,
                                   age_based_risk,
                                   mortality_risk_type,
                                   relative_mortality_risk)
     
     # Update summary log for survivors
-    survivors[[k]] <- record_survivors(cohort, k)
+    survivors[[k]] <- record_survivors(cohort, k, lesion_formation_rate)
   }
   
   # Once 10 or fewer people are left alive — they all enter the cemetery
@@ -264,7 +284,8 @@ Simulate_Cemetery <- function(cohort_size,
   cohort <- cohort %>% dplyr::select(-"dead")
   
   # Model output
-  output <- list(individual_outcomes = cohort, survivors = do.call(rbind, survivors))
+  output <- list(individual_outcomes = cohort, survivors = rbind(c("Age" = 0, "Alive" = cohort_size),do.call(rbind, survivors))
+                 )
   
   return(output)
 }
