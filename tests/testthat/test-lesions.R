@@ -1,616 +1,542 @@
 # Unit tests for lesion module
+#
+# HOW TEST FILES WORK IN R (testthat overview)
+# -----------------------------------------------
+# This file is discovered and run automatically by testthat when you call
+# devtools::test() from your package root. Every file in tests/testthat/ that
+# starts with "test_" is executed.
+#
+# The fundamental building block is test_that():
+#
+#   test_that("plain-English description of what should be true", {
+#     ... setup code ...
+#     expect_*(...)   # one or more expectations
+#   })
+#
+# If every expect_*() inside a test_that() block passes, the test is green.
+# If any one fails, the whole test_that() block is marked as failed, and
+# testthat reports which expectation broke and what values it actually saw.
+#
+# Common expectations used here:
+#   expect_error(expr)          — expr must throw an error
+#   expect_no_error(expr)       — expr must NOT throw an error
+#   expect_true(x)              — x must be TRUE
+#   expect_false(x)             — x must be FALSE
+#   expect_equal(x, y)          — x and y must be identical (within tolerance)
+#   expect_s3_class(x, "cls")   — x must have S3 class "cls"
+#   expect_type(x, "type")      — typeof(x) must equal "type"
+#   expect_gt(x, y)             — x must be greater than y
+
 
 # -----------------------------------------------------------------------------
 # Test fixtures
 # -----------------------------------------------------------------------------
+# Fixtures are reusable setup objects. Defining them once at the top means
+# every test_that() block can use them without repeating boilerplate.
+# create_test_cohort() is a *function* rather than a plain object so that
+# each test gets a fresh, independent copy of the cohort — mutations in one
+# test cannot bleed into another.
 
-# Lesion parameters for each model
-lesion_param_constant <- c(0.05)  # k1 only
-lesion_param_constant_to <- c(0.05, 6)  # k1, age_end
-lesion_param_constant_from <- c(0.05, 18)  # k1, age_start
-lesion_param_constant_interval <- c(0.05, 2, 6)  # k1, age_start, age_end
-
-create_test_state <- function(n = 100) {
+#' Build a minimal cohort data frame for testing
+#' @param n Number of agents
+#' @param all_alive If TRUE, no agents are marked dead (default TRUE)
+create_test_cohort <- function(n = 100, all_alive = TRUE) {
   data.frame(
-    agent_id = 1:n,
-    age = as.numeric(sample(0:80, n, replace = TRUE)),
-    lesion = sample(c(TRUE, FALSE), n, replace = TRUE),
-    dead = rep(FALSE, n),
+    agent_id  = 1:n,
+    age       = as.numeric(sample(0:80, n, replace = TRUE)),
+    lesion    = rep(0L, n),           # integer 0/1, matching production code
+    dead      = rep(!all_alive, n),
     in_sample = rep(TRUE, n)
   )
 }
 
+# Convenience wrapper: returns the Alive index vector for a cohort.
+# form_lesions() takes an explicit Alive argument so tests must supply it.
+alive_idx <- function(cohort) which(!cohort$dead)
+
+
 # -----------------------------------------------------------------------------
 # Input validation tests
 # -----------------------------------------------------------------------------
+# These tests check that the function refuses obviously wrong inputs before
+# doing any computation. Fast failure with a clear error is better than silent
+# bad output. Each expect_error() asserts that an error is thrown — the test
+# PASSES when the error occurs.
 
-test_that("lesion module raises error when lesion_model is NULL", {
-  state <- create_test_state()
-  dx <- 1
-
+test_that("lesion_formation_rate must be between 0 and 1", {
+  cohort <- create_test_cohort()
+  Alive  <- alive_idx(cohort)
+  
   expect_error(
-    apply_lesions(
-      state = state,
-      lesion_model = NULL,
-      lesion_param = lesion_param_constant,
-      dx = dx
-    )
+    form_lesions(cohort, Alive,
+                 formation_window_opens  = 0,
+                 formation_window_closes = 80,
+                 lesion_formation_rate   = -0.1,
+                 dx              = 1)
+  )
+  
+  expect_error(
+    form_lesions(cohort, Alive,
+                 formation_window_opens  = 0,
+                 formation_window_closes = 80,
+                 lesion_formation_rate   = 1.5,
+                 dx              = 1)
   )
 })
 
-test_that("lesion module raises error when lesion_model is unsupported", {
-  state <- create_test_state()
-  dx <- 1
-
+test_that("formation_window_opens must be non-negative", {
+  cohort <- create_test_cohort()
+  Alive  <- alive_idx(cohort)
+  
   expect_error(
-    apply_lesions(
-      state = state,
-      lesion_model = "gompertz",
-      lesion_param = lesion_param_constant,
-      dx = dx
-    )
-  )
-
-  expect_error(
-    apply_lesions(
-      state = state,
-      lesion_model = "unknown",
-      lesion_param = lesion_param_constant,
-      dx = dx
-    )
+    form_lesions(cohort, Alive,
+                 formation_window_opens  = -1,
+                 formation_window_closes = 10,
+                 lesion_formation_rate   = 0.05,
+                 dx              = 1)
   )
 })
 
-test_that("constant model requires length-1 parameter vector", {
-  state <- create_test_state()
-  dx <- 1
-
+test_that("formation_window_closes must be >= formation_window_opens", {
+  cohort <- create_test_cohort()
+  Alive  <- alive_idx(cohort)
+  
   expect_error(
-    apply_lesions(
-      state = state,
-      lesion_model = "constant",
-      lesion_param = c(0.05, 6),  # wrong length
-      dx = dx
-    )
-  )
-
-  expect_error(
-    apply_lesions(
-      state = state,
-      lesion_model = "constant",
-      lesion_param = c(),  # empty
-      dx = dx
-    )
+    form_lesions(cohort, Alive,
+                 formation_window_opens  = 10,
+                 formation_window_closes = 5,   # closes before it opens
+                 lesion_formation_rate   = 0.05,
+                 dx              = 1)
   )
 })
 
-test_that("constant_to model requires length-2 parameter vector", {
-  state <- create_test_state()
-  dx <- 1
-
+test_that("Alive index must be a non-empty integer vector", {
+  cohort <- create_test_cohort()
+  
   expect_error(
-    apply_lesions(
-      state = state,
-      lesion_model = "constant_to",
-      lesion_param = c(0.05),  # too short
-      dx = dx
-    )
-  )
-
-  expect_error(
-    apply_lesions(
-      state = state,
-      lesion_model = "constant_to",
-      lesion_param = c(0.05, 2, 6),  # too long
-      dx = dx
-    )
+    form_lesions(cohort, Alive = integer(0),   # empty — no living agents
+                 formation_window_opens  = 0,
+                 formation_window_closes = 80,
+                 lesion_formation_rate   = 0.05,
+                 dx              = 1)
   )
 })
 
-test_that("constant_from model requires length-2 parameter vector", {
-  state <- create_test_state()
-  dx <- 1
-
-  expect_error(
-    apply_lesions(
-      state = state,
-      lesion_model = "constant_from",
-      lesion_param = c(0.05),  # too short
-      dx = dx
-    )
-  )
-
-  expect_error(
-    apply_lesions(
-      state = state,
-      lesion_model = "constant_from",
-      lesion_param = c(0.05, 2, 6),  # too long
-      dx = dx
-    )
-  )
-})
-
-test_that("constant_interval model requires length-3 parameter vector", {
-  state <- create_test_state()
-  dx <- 1
-
-  expect_error(
-    apply_lesions(
-      state = state,
-      lesion_model = "constant_interval",
-      lesion_param = c(0.05, 6),  # too short
-      dx = dx
-    )
-  )
-
-  expect_error(
-    apply_lesions(
-      state = state,
-      lesion_model = "constant_interval",
-      lesion_param = c(0.05),  # too short
-      dx = dx
-    )
-  )
-})
 
 # -----------------------------------------------------------------------------
 # Successful execution tests
 # -----------------------------------------------------------------------------
+# These are the mirror image of the validation tests: we confirm that valid
+# inputs do NOT throw errors. expect_no_error() passes when the expression
+# runs cleanly to completion.
 
-test_that("constant model executes successfully", {
-  state <- create_test_state()
-  dx <- 1
-
+test_that("function executes with a full-lifetime window", {
+  cohort <- create_test_cohort()
+  Alive  <- alive_idx(cohort)
+  
   expect_no_error(
-    apply_lesions(
-      state = state,
-      lesion_model = "constant",
-      lesion_param = lesion_param_constant,
-      dx = dx
-    )
+    form_lesions(cohort, Alive,
+                 formation_window_opens  = 0,
+                 formation_window_closes = 80,
+                 lesion_formation_rate   = 0.05,
+                 dx              = 1)
   )
 })
 
-test_that("constant_to model executes successfully", {
-  state <- create_test_state()
-  dx <- 1
-
+test_that("function executes with a window that opens mid-life", {
+  cohort <- create_test_cohort()
+  Alive  <- alive_idx(cohort)
+  
   expect_no_error(
-    apply_lesions(
-      state = state,
-      lesion_model = "constant_to",
-      lesion_param = lesion_param_constant_to,
-      dx = dx
-    )
+    form_lesions(cohort, Alive,
+                 formation_window_opens  = 18,
+                 formation_window_closes = 80,
+                 lesion_formation_rate   = 0.05,
+                 dx              = 1)
   )
 })
 
-test_that("constant_from model executes successfully", {
-  state <- create_test_state()
-  dx <- 1
-
+test_that("function executes with a window that closes early", {
+  cohort <- create_test_cohort()
+  Alive  <- alive_idx(cohort)
+  
   expect_no_error(
-    apply_lesions(
-      state = state,
-      lesion_model = "constant_from",
-      lesion_param = lesion_param_constant_from,
-      dx = dx
-    )
+    form_lesions(cohort, Alive,
+                 formation_window_opens  = 0,
+                 formation_window_closes = 6,
+                 lesion_formation_rate   = 0.05,
+                 dx              = 1)
   )
 })
 
-test_that("constant_interval model executes successfully", {
-  state <- create_test_state()
-  dx <- 1
-
+test_that("function executes with a bounded interval window", {
+  cohort <- create_test_cohort()
+  Alive  <- alive_idx(cohort)
+  
   expect_no_error(
-    apply_lesions(
-      state = state,
-      lesion_model = "constant_interval",
-      lesion_param = lesion_param_constant_interval,
-      dx = dx
-    )
+    form_lesions(cohort, Alive,
+                 formation_window_opens  = 2,
+                 formation_window_closes = 6,
+                 lesion_formation_rate   = 0.05,
+                 dx              = 1)
   )
 })
 
-test_that("lesion module returns a dataframe", {
-  state <- create_test_state()
-  dx <- 1
-
-  result <- apply_lesions(
-    state = state,
-    lesion_model = "constant",
-    lesion_param = lesion_param_constant,
-    dx = dx
-  )
-
+test_that("function returns a data frame", {
+  cohort <- create_test_cohort()
+  Alive  <- alive_idx(cohort)
+  
+  result <- form_lesions(cohort, Alive,
+                         formation_window_opens  = 0,
+                         formation_window_closes = 80,
+                         lesion_formation_rate   = 0.05,
+                         dx              = 1)
+  
   expect_s3_class(result, "data.frame")
 })
+
 
 # -----------------------------------------------------------------------------
 # Output structure tests
 # -----------------------------------------------------------------------------
+# These confirm that the function returns a data frame with the same shape and
+# column types as the input. The lesion module must not add, remove, or rename
+# columns, and must not change the number of rows.
 
-test_that("output state contains same columns as input state", {
-  state <- create_test_state()
-  dx <- 1
-
-  result <- apply_lesions(
-    state = state,
-    lesion_model = "constant",
-    lesion_param = lesion_param_constant,
-    dx = dx
-  )
-
-  expect_equal(sort(names(result)), sort(names(state)))
+test_that("output contains the same columns as input", {
+  cohort <- create_test_cohort()
+  Alive  <- alive_idx(cohort)
+  
+  result <- form_lesions(cohort, Alive,
+                         formation_window_opens  = 0,
+                         formation_window_closes = 80,
+                         lesion_formation_rate   = 0.05,
+                         dx              = 1)
+  
+  expect_equal(sort(names(result)), sort(names(cohort)))
 })
 
-test_that("output state has same dimensions as input state", {
-  state <- create_test_state(n = 150)
-  dx <- 1
-
-  result <- apply_lesions(
-    state = state,
-    lesion_model = "constant",
-    lesion_param = lesion_param_constant,
-    dx = dx
-  )
-
-  expect_equal(nrow(result), nrow(state))
-  expect_equal(ncol(result), ncol(state))
-  expect_equal(dim(result), dim(state))
+test_that("output has the same dimensions as input", {
+  cohort <- create_test_cohort(n = 150)
+  Alive  <- alive_idx(cohort)
+  
+  result <- form_lesions(cohort, Alive,
+                         formation_window_opens  = 0,
+                         formation_window_closes = 80,
+                         lesion_formation_rate   = 0.05,
+                         dx              = 1)
+  
+  expect_equal(dim(result), dim(cohort))
 })
 
-test_that("output state has expected column types", {
-  state <- create_test_state()
-  dx <- 1
-
-  result <- apply_lesions(
-    state = state,
-    lesion_model = "constant",
-    lesion_param = lesion_param_constant,
-    dx = dx
-  )
-
-  expect_type(result$agent_id, "integer")
-  expect_type(result$age, "double")
-  expect_type(result$lesion, "logical")
-  expect_type(result$dead, "logical")
+test_that("output columns have expected types", {
+  # This test pins down the column types of the returned data frame so that a
+  # refactor cannot silently change integer lesion to logical, etc.
+  cohort <- create_test_cohort()
+  Alive  <- alive_idx(cohort)
+  
+  result <- form_lesions(cohort, Alive,
+                         formation_window_opens  = 0,
+                         formation_window_closes = 80,
+                         lesion_formation_rate   = 0.05,
+                         dx              = 1)
+  
+  expect_type(result$agent_id,  "integer")
+  expect_type(result$age,       "double")
+  expect_type(result$lesion,    "integer")   # 0/1 integer, not logical
+  expect_type(result$dead,      "logical")
   expect_type(result$in_sample, "logical")
 })
+
 
 # -----------------------------------------------------------------------------
 # Lesion acquisition logic tests
 # -----------------------------------------------------------------------------
+# These are the most important tests: they check the *behaviour* of the
+# function, not just its shape. They use controlled inputs (known ages, known
+# lesion states, sometimes set.seed() for reproducibility) so the expected
+# output can be stated precisely.
 
 test_that("agents with existing lesions retain lesion status", {
-  state <- create_test_state(n = 100)
-  dx <- 1
-
-  # Track which agents already have lesions
-  had_lesion <- state$lesion
-
-  result <- apply_lesions(
-    state = state,
-    lesion_model = "constant",
-    lesion_param = lesion_param_constant,
-    dx = dx
-  )
-
-  # All agents who had lesions should still have them
-  expect_true(all(result$lesion[had_lesion] == TRUE))
+  # Once a lesion is acquired it can never be lost. pmax() in form_lesions
+  # guarantees this, but we verify it explicitly.
+  cohort        <- create_test_cohort(n = 100)
+  cohort$lesion <- rep(c(0L, 1L), 50)   # alternating: half already have lesions
+  Alive         <- alive_idx(cohort)
+  had_lesion    <- cohort$lesion == 1L
+  
+  result <- form_lesions(cohort, Alive,
+                         formation_window_opens  = 0,
+                         formation_window_closes = 80,
+                         lesion_formation_rate   = 0.99,
+                         dx              = 1)  # near-certain acquisition
+  
+  expect_true(all(result$lesion[had_lesion] == 1L))
 })
 
 test_that("dead agents are not processed for lesion acquisition", {
-  state <- create_test_state(n = 100)
-  # Mark some agents as dead and without lesions
-  state$dead[1:20] <- TRUE
-  state$lesion[1:20] <- FALSE
-  dx <- 1
-
-  result <- apply_lesions(
-    state = state,
-    lesion_model = "constant",
-    lesion_param = lesion_param_constant,
-    dx = dx
-  )
-
-  # Dead agents should not have acquired lesions
-  expect_true(all(result$lesion[1:20] == FALSE))
+  # Agents in the Alive vector are those for whom form_lesions rolls dice.
+  # Dead agents are simply absent from Alive, so their lesion column must not
+  # change regardless of their age.
+  cohort             <- create_test_cohort(n = 100)
+  cohort$dead[1:20]  <- TRUE
+  cohort$lesion[1:20]<- 0L
+  cohort$age[1:20]   <- 5     # within any reasonable window
+  Alive              <- alive_idx(cohort)  # excludes rows 1:20
+  
+  result <- form_lesions(cohort, Alive,
+                         formation_window_opens  = 0,
+                         formation_window_closes = 80,
+                         lesion_formation_rate   = 0.99,
+                         dx              = 1)
+  
+  expect_true(all(result$lesion[1:20] == 0L))
 })
 
-test_that("lesion acquisition respects age window for constant_to model", {
-  # Create state with controlled ages
-  state <- data.frame(
-    agent_id = 1:100,
-    age = c(rep(3, 50), rep(10, 50)),  # 50 agents at age 3, 50 at age 10
-    lesion = rep(FALSE, 100),
-    dead = rep(FALSE, 100),
+test_that("no transitions occur when lesion_formation_rate is zero", {
+  cohort        <- create_test_cohort(n = 100)
+  cohort$age    <- rep(5, 100)   # everyone in a typical window
+  cohort$lesion <- rep(0L, 100)
+  Alive         <- alive_idx(cohort)
+  
+  result <- form_lesions(cohort, Alive,
+                         formation_window_opens  = 0,
+                         formation_window_closes = 80,
+                         lesion_formation_rate   = 0,
+                         dx              = 1)
+  
+  expect_true(all(result$lesion == 0L))
+})
+
+test_that("near-certain rate causes most agents in window to acquire lesions", {
+  # This is a stochastic test: with rate = 0.99 and n = 1000 the probability
+  # of fewer than 95% converting is astronomically small, so it is safe to
+  # assert without set.seed().
+  cohort        <- create_test_cohort(n = 1000)
+  cohort$age    <- rep(5, 1000)
+  cohort$lesion <- rep(0L, 1000)
+  Alive         <- alive_idx(cohort)
+  
+  result <- form_lesions(cohort, Alive,
+                         formation_window_opens  = 0,
+                         formation_window_closes = 80,
+                         lesion_formation_rate   = 0.99,
+                         dx              = 1)
+  
+  expect_gt(mean(result$lesion), 0.95)
+})
+
+
+# -----------------------------------------------------------------------------
+# Age window tests
+# -----------------------------------------------------------------------------
+
+test_that("agents outside the window (above closes) do not acquire lesions", {
+  cohort <- data.frame(
+    agent_id  = 1:100,
+    age       = rep(10, 100),   # above formation_window_closes = 6
+    lesion    = rep(0L, 100),
+    dead      = rep(FALSE, 100),
     in_sample = rep(TRUE, 100)
   )
-  dx <- 1
-  # Window ends at age 6
-  lesion_param <- c(0.99, 6)  # High k1 to ensure some transitions
-
-  result <- apply_lesions(
-    state = state,
-    lesion_model = "constant_to",
-    lesion_param = lesion_param,
-    dx = dx
-  )
-
-  # Agents at age 10 (outside window) should not have acquired lesions
-  expect_true(all(result$lesion[51:100] == FALSE))
+  Alive <- alive_idx(cohort)
+  
+  result <- form_lesions(cohort, Alive,
+                         formation_window_opens  = 0,
+                         formation_window_closes = 6,
+                         lesion_formation_rate   = 0.99,
+                         dx              = 1)
+  
+  expect_true(all(result$lesion == 0L))
 })
 
-test_that("lesion acquisition respects age window for constant_from model", {
-  # Create state with controlled ages
-  state <- data.frame(
-    agent_id = 1:100,
-    age = c(rep(10, 50), rep(25, 50)),  # 50 agents at age 10, 50 at age 25
-    lesion = rep(FALSE, 100),
-    dead = rep(FALSE, 100),
+test_that("agents outside the window (below opens) do not acquire lesions", {
+  cohort <- data.frame(
+    agent_id  = 1:100,
+    age       = rep(1, 100),    # below formation_window_opens = 5
+    lesion    = rep(0L, 100),
+    dead      = rep(FALSE, 100),
     in_sample = rep(TRUE, 100)
   )
-  dx <- 1
-  # Window starts at age 18
-  lesion_param <- c(0.99, 18)  # High k1 to ensure some transitions
-
-  result <- apply_lesions(
-    state = state,
-    lesion_model = "constant_from",
-    lesion_param = lesion_param,
-    dx = dx
-  )
-
-  # Agents at age 10 (outside window) should not have acquired lesions
-  expect_true(all(result$lesion[1:50] == FALSE))
+  Alive <- alive_idx(cohort)
+  
+  result <- form_lesions(cohort, Alive,
+                         formation_window_opens  = 5,
+                         formation_window_closes = 80,
+                         lesion_formation_rate   = 0.99,
+                         dx              = 1)
+  
+  expect_true(all(result$lesion == 0L))
 })
 
-test_that("lesion acquisition respects age window for constant_interval model", {
-  # Create state with controlled ages
-  state <- data.frame(
-    agent_id = 1:150,
-    age = c(rep(1, 50), rep(4, 50), rep(10, 50)),  # ages 1, 4, and 10
-    lesion = rep(FALSE, 150),
-    dead = rep(FALSE, 150),
+test_that("agents inside a bounded interval window can acquire lesions", {
+  cohort <- data.frame(
+    agent_id  = 1:150,
+    age       = c(rep(1, 50), rep(4, 50), rep(10, 50)),  # below / in / above
+    lesion    = rep(0L, 150),
+    dead      = rep(FALSE, 150),
     in_sample = rep(TRUE, 150)
   )
-  dx <- 1
-  # Window is [2, 6)
-  lesion_param <- c(0.99, 2, 6)  # High k1 to ensure some transitions
-
-  result <- apply_lesions(
-    state = state,
-    lesion_model = "constant_interval",
-    lesion_param = lesion_param,
-    dx = dx
-  )
-
-  # Agents at age 1 (before window) should not have acquired lesions
-  expect_true(all(result$lesion[1:50] == FALSE))
-  # Agents at age 10 (after window) should not have acquired lesions
-  expect_true(all(result$lesion[101:150] == FALSE))
+  Alive <- alive_idx(cohort)
+  
+  result <- form_lesions(cohort, Alive,
+                         formation_window_opens  = 2,
+                         formation_window_closes = 6,
+                         lesion_formation_rate   = 0.99,
+                         dx              = 1)
+  
+  # Below window — no transitions
+  expect_true(all(result$lesion[1:50]    == 0L))
+  # Above window — no transitions
+  expect_true(all(result$lesion[101:150] == 0L))
+  # Inside window — most should transition
+  expect_gt(mean(result$lesion[51:100]), 0.95)
 })
+
+
+# -----------------------------------------------------------------------------
+# Window boundary tests
+# -----------------------------------------------------------------------------
+# These pin down *inclusive* vs *exclusive* behaviour at the exact boundary
+# ages, matching the >= / <= conditions in form_lesions.
+
+test_that("agents exactly at formation_window_opens can acquire lesions", {
+  set.seed(42)
+  cohort <- data.frame(
+    agent_id  = 1:1000,
+    age       = rep(18, 1000),   # exactly at opens
+    lesion    = rep(0L, 1000),
+    dead      = rep(FALSE, 1000),
+    in_sample = rep(TRUE, 1000)
+  )
+  Alive <- alive_idx(cohort)
+  
+  result <- form_lesions(cohort, Alive,
+                         formation_window_opens  = 18,
+                         formation_window_closes = 80,
+                         lesion_formation_rate   = 0.99,
+                         dx              = 1)
+  
+  expect_gt(mean(result$lesion), 0.95)  # lower bound is inclusive
+})
+
+test_that("agents just below formation_window_opens cannot acquire lesions", {
+  cohort <- data.frame(
+    agent_id  = 1:100,
+    age       = rep(17.9, 100),  # just below opens = 18
+    lesion    = rep(0L, 100),
+    dead      = rep(FALSE, 100),
+    in_sample = rep(TRUE, 100)
+  )
+  Alive <- alive_idx(cohort)
+  
+  result <- form_lesions(cohort, Alive,
+                         formation_window_opens  = 18,
+                         formation_window_closes = 80,
+                         lesion_formation_rate   = 0.99,
+                         dx              = 1)
+  
+  expect_true(all(result$lesion == 0L))
+})
+
+test_that("agents exactly at formation_window_closes can acquire lesions", {
+  # form_lesions uses <=, so the closes boundary is *inclusive*
+  set.seed(42)
+  cohort <- data.frame(
+    agent_id  = 1:1000,
+    age       = rep(6, 1000),    # exactly at closes
+    lesion    = rep(0L, 1000),
+    dead      = rep(FALSE, 1000),
+    in_sample = rep(TRUE, 1000)
+  )
+  Alive <- alive_idx(cohort)
+  
+  result <- form_lesions(cohort, Alive,
+                         formation_window_opens  = 0,
+                         formation_window_closes = 6,
+                         lesion_formation_rate   = 0.99,
+                         dx              = 1)
+  
+  expect_gt(mean(result$lesion), 0.95)  # upper bound is inclusive
+})
+
+test_that("agents just above formation_window_closes cannot acquire lesions", {
+  cohort <- data.frame(
+    agent_id  = 1:100,
+    age       = rep(7, 100),     # just above closes = 6
+    lesion    = rep(0L, 100),
+    dead      = rep(FALSE, 100),
+    in_sample = rep(TRUE, 100)
+  )
+  Alive <- alive_idx(cohort)
+  
+  result <- form_lesions(cohort, Alive,
+                         formation_window_opens  = 0,
+                         formation_window_closes = 6,
+                         lesion_formation_rate   = 0.99,
+                         dx              = 1)
+  
+  expect_true(all(result$lesion == 0L))
+})
+
 
 # -----------------------------------------------------------------------------
 # Age unchanged tests
 # -----------------------------------------------------------------------------
 
-test_that("agent ages are not modified by lesion module", {
-  state <- create_test_state(n = 100)
-  dx <- 5
-
-  result <- apply_lesions(
-    state = state,
-    lesion_model = "constant",
-    lesion_param = lesion_param_constant,
-    dx = dx
-  )
-
-  # Ages should be unchanged - lesion module does not modify age
-  expect_equal(result$age, state$age)
+test_that("agent ages are not modified by the lesion module", {
+  # form_lesions must be a pure lesion-status update — it must not touch
+  # any other column. We verify age specifically because an earlier version
+  # of the module accidentally incremented age as a side-effect.
+  cohort       <- create_test_cohort(n = 100)
+  original_age <- cohort$age
+  Alive        <- alive_idx(cohort)
+  
+  result <- form_lesions(cohort, Alive,
+                         formation_window_opens  = 0,
+                         formation_window_closes = 80,
+                         lesion_formation_rate   = 0.05,
+                         dx              = 1)
+  
+  expect_equal(result$age, original_age)
 })
 
-# -----------------------------------------------------------------------------
-# Transition probability tests
-# -----------------------------------------------------------------------------
-
-test_that("no transitions occur when k1 is zero", {
-  state <- data.frame(
-    agent_id = 1:100,
-    age = as.numeric(rep(5, 100)),
-    lesion = rep(FALSE, 100),
-    dead = rep(FALSE, 100),
-    in_sample = rep(TRUE, 100)
-  )
-  dx <- 1
-  lesion_param <- c(0)  # k1 = 0
-
-  result <- apply_lesions(
-    state = state,
-    lesion_model = "constant",
-    lesion_param = lesion_param,
-    dx = dx
-  )
-
-  # No one should acquire a lesion
-  expect_true(all(result$lesion == FALSE))
-})
-
-test_that("no transitions when k1 is zero for constant_to model", {
-  state <- data.frame(
-    agent_id = 1:100,
-    age = as.numeric(rep(3, 100)),  # within window [0, 6)
-    lesion = rep(FALSE, 100),
-    dead = rep(FALSE, 100),
-    in_sample = rep(TRUE, 100)
-  )
-  dx <- 1
-  lesion_param <- c(0, 6)  # k1 = 0, window ends at 6
-
-  result <- apply_lesions(
-    state = state,
-    lesion_model = "constant_to",
-    lesion_param = lesion_param,
-    dx = dx
-  )
-
-  expect_true(all(result$lesion == FALSE))
-})
-
-# -----------------------------------------------------------------------------
-# Window boundary tests
-# -----------------------------------------------------------------------------
-
-test_that("constant_to: agents exactly at age_end do not acquire lesions", {
-  state <- data.frame(
-    agent_id = 1:100,
-    age = as.numeric(rep(6, 100)),  # exactly at boundary
-    lesion = rep(FALSE, 100),
-    dead = rep(FALSE, 100),
-    in_sample = rep(TRUE, 100)
-  )
-  dx <- 1
-  lesion_param <- c(0.99, 6)  # high k1, window ends at 6
-
-  result <- apply_lesions(
-    state = state,
-    lesion_model = "constant_to",
-    lesion_param = lesion_param,
-    dx = dx
-  )
-
-  # Agents at age 6 are at or past the boundary, no transitions
-  expect_true(all(result$lesion == FALSE))
-})
-
-test_that("constant_from: agents exactly at age_start can acquire lesions", {
-  set.seed(12345)
-  state <- data.frame(
-    agent_id = 1:1000,
-    age = as.numeric(rep(18, 1000)),  # exactly at boundary
-    lesion = rep(FALSE, 1000),
-    dead = rep(FALSE, 1000),
-    in_sample = rep(TRUE, 1000)
-  )
-  dx <- 1
-  lesion_param <- c(0.99, 18)  # high k1, window starts at 18
-
-  result <- apply_lesions(
-    state = state,
-    lesion_model = "constant_from",
-    lesion_param = lesion_param,
-    dx = dx
-  )
-
-  # Agents at age 18 are eligible, most should transition
-  expect_gt(mean(result$lesion), 0.9)
-})
-
-test_that("constant_from: agents just below age_start cannot acquire lesions", {
-  state <- data.frame(
-    agent_id = 1:100,
-    age = as.numeric(rep(17.9, 100)),  # just below boundary
-    lesion = rep(FALSE, 100),
-    dead = rep(FALSE, 100),
-    in_sample = rep(TRUE, 100)
-  )
-  dx <- 1
-  lesion_param <- c(0.99, 18)  # high k1, window starts at 18
-
-  result <- apply_lesions(
-    state = state,
-    lesion_model = "constant_from",
-    lesion_param = lesion_param,
-    dx = dx
-  )
-
-  # Agents below 18 should not transition
-  expect_true(all(result$lesion == FALSE))
-})
-
-test_that("constant_interval: agents at boundaries behave correctly", {
-  # Test lower boundary (included)
-  set.seed(12345)
-  state_lower <- data.frame(
-    agent_id = 1:1000,
-    age = as.numeric(rep(2, 1000)),  # exactly at age_start
-    lesion = rep(FALSE, 1000),
-    dead = rep(FALSE, 1000),
-    in_sample = rep(TRUE, 1000)
-  )
-  lesion_param <- c(0.99, 2, 6)  # window [2, 6)
-
-  result_lower <- apply_lesions(
-    state = state_lower,
-    lesion_model = "constant_interval",
-    lesion_param = lesion_param,
-    dx = 1
-  )
-
-  # At age 2 (lower boundary), transitions should occur
-  expect_gt(mean(result_lower$lesion), 0.9)
-
-  # Test upper boundary (excluded)
-  state_upper <- data.frame(
-    agent_id = 1:100,
-    age = as.numeric(rep(6, 100)),  # exactly at age_end
-    lesion = rep(FALSE, 100),
-    dead = rep(FALSE, 100),
-    in_sample = rep(TRUE, 100)
-  )
-
-  result_upper <- apply_lesions(
-    state = state_upper,
-    lesion_model = "constant_interval",
-    lesion_param = lesion_param,
-    dx = 1
-  )
-
-  # At age 6 (upper boundary), no transitions
-  expect_true(all(result_upper$lesion == FALSE))
-})
 
 # -----------------------------------------------------------------------------
 # Combined eligibility tests
 # -----------------------------------------------------------------------------
+# This is a single, precise scenario that exercises all four combinations of
+# (dead/alive) x (in-window/out-of-window) at once.
 
 test_that("only alive agents without lesions in window can acquire lesions", {
-  set.seed(12345)
-  state <- data.frame(
-    agent_id = 1:8,
-    age = as.numeric(c(3, 3, 3, 3, 10, 10, 3, 3)),
-    lesion = c(FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, FALSE, FALSE),
-    dead = c(FALSE, TRUE, FALSE, TRUE, FALSE, TRUE, FALSE, FALSE),
+  set.seed(42)
+  cohort <- data.frame(
+    agent_id  = 1:8,
+    age       = as.numeric(c(3, 3, 3, 3, 10, 10, 3, 3)),
+    lesion    = c(0L, 0L, 1L, 1L, 0L, 0L, 0L, 0L),
+    dead      = c(FALSE, TRUE, FALSE, TRUE, FALSE, TRUE, FALSE, FALSE),
     in_sample = rep(TRUE, 8)
   )
-  # Agent 1: alive, no lesion, in window -> CAN transition
-  # Agent 2: dead, no lesion, in window -> CANNOT (dead)
-  # Agent 3: alive, has lesion, in window -> CANNOT (already has)
-  # Agent 4: dead, has lesion, in window -> CANNOT (dead + already has)
-  # Agent 5: alive, no lesion, outside window -> CANNOT (outside)
-  # Agent 6: dead, no lesion, outside window -> CANNOT (dead + outside)
-  # Agent 7-8: alive, no lesion, in window -> CAN transition
-
-  lesion_param <- c(0.99, 6)  # high k1, window ends at 6
-
-  result <- apply_lesions(
-    state = state,
-    lesion_model = "constant_to",
-    lesion_param = lesion_param,
-    dx = 1
-  )
-
-  # Agent 2: should remain FALSE (dead)
-  expect_false(result$lesion[2])
-  # Agent 3: should remain TRUE (already had)
-  expect_true(result$lesion[3])
-  # Agent 4: should remain TRUE (already had)
-  expect_true(result$lesion[4])
-  # Agent 5: should remain FALSE (outside window)
-  expect_false(result$lesion[5])
-  # Agent 6: should remain FALSE (dead + outside)
-  expect_false(result$lesion[6])
+  # Agent 1: alive, no lesion, age 3 (in [0,6])   -> CAN transition
+  # Agent 2: dead,  no lesion, age 3 (in window)  -> CANNOT (dead)
+  # Agent 3: alive, has lesion, age 3             -> already 1, stays 1
+  # Agent 4: dead,  has lesion, age 3             -> CANNOT (dead)
+  # Agent 5: alive, no lesion, age 10 (outside)  -> CANNOT (outside window)
+  # Agent 6: dead,  no lesion, age 10             -> CANNOT (dead + outside)
+  # Agent 7: alive, no lesion, age 3              -> CAN transition
+  # Agent 8: alive, no lesion, age 3              -> CAN transition
+  
+  Alive  <- alive_idx(cohort)  # rows 1, 3, 5, 7, 8
+  
+  result <- form_lesions(cohort, Alive,
+                         formation_window_opens  = 0,
+                         formation_window_closes = 6,
+                         lesion_formation_rate   = 0.99,
+                         dx              = 1)
+  
+  expect_false(result$lesion[2] == 1L)   # dead agent: no change
+  expect_true( result$lesion[3] == 1L)   # pre-existing lesion: retained
+  expect_true( result$lesion[4] == 1L)   # dead + pre-existing: retained
+  expect_false(result$lesion[5] == 1L)   # outside window: no change
+  expect_false(result$lesion[6] == 1L)   # dead + outside: no change
 })
-
