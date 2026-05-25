@@ -29,6 +29,12 @@ inst/doc/*.R
 .DS_Store
 Thumbs.db
 
+# Claude Code
+.claude/settings.local.json
+
+# Generated check-script output
+inst/scripts/*.png
+
 # Compiled vignettes
 vignettes/*.html
 vignettes/*.pdf
