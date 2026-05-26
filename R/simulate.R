@@ -159,15 +159,22 @@ age_pop <- function(pop, k) {
 }
 
 #' Compute Siler hazard for a given age
-#' @param k Age (integer timestep)
+#' @param ages Integer vector, if population is age-structured
 #' @param mortality_regime Data frame with Siler parameters (a1, b1, a2, a3, b3)
 #' @return Numeric hazard value
 #' @keywords internal
-compute_siler_risk <- function(k, mortality_regime) {
-  mortality_regime$a1 * exp(-mortality_regime$b1 * k) +
-    mortality_regime$a2 +
-    mortality_regime$a3 * exp(mortality_regime$b3 * k)
+compute_siler_risk <- function(ages, mortality_regime) {
+  if(length(unique(ages)) == 1){ # if all agents are the same age
+    mortality_regime$a1 * exp(-mortality_regime$b1 * ages[1]) + # calculate a scalar
+      mortality_regime$a2 +
+      mortality_regime$a3 * exp(mortality_regime$b3 * ages[1])
+  } else{ # otherwise, calculate a vector of age-dependent values, length = n living agents
+    mortality_regime$a1 * exp(-mortality_regime$b1 * ages) +
+      mortality_regime$a2 +
+      mortality_regime$a3 * exp(mortality_regime$b3 * ages)
+  }
 }
+
 
 #' Vectorized lesion formation across all living agents
 #'
@@ -354,8 +361,8 @@ Simulate_Cemetery <- function(pop0_size,
     pop <- age_pop(pop, k)
     Alive <- which(!pop$dead)
     
-    # Baseline Siler mortality risk for this age (scalar — same for all agents)
-    age_based_risk <- compute_siler_risk(k, mortality_regime)
+    # Baseline Siler mortality risk for this age (vector if the population is age-structured; scalar if the population is an age cohort)
+age_based_risk <- compute_siler_risk(ages = pop[Alive,]$age, mortality_regime = mortality_regime) ###### Need to update this function. It relies on k, the time marker, which is only equivalent to agent age when the model generates a cohort and not an age-structured population.
     
     # Vectorized lesion formation and mortality across all living agents.
     # Each agent receives its own independent draw; case_when() dispatches
@@ -373,11 +380,11 @@ Simulate_Cemetery <- function(pop0_size,
                                   mortality_risk_type,
                                   relative_mortality_risk)
     
-    # Update summary log for survivors. NOTE: Right now, the 'survivors' log isn't set up for age-structured populations. For now, if the model generates an age-structured population, it records population size annually instead.  This is something to come back to in future, but for now, the survivors frequency table isn't particularly important for any of the questions we're applying this model to. 
+    # Update summary log for survivors. NOTE: Right now, the 'survivors' log isn't set up for age-structured populations. For now, if the model generates an age-structured population, it records population size annually instead. It doesn't track lesion frequency in the population as a whole. This is something to come back to in future, but for now, the survivors frequency table isn't particularly important for any of the questions we're applying this model to. 
     if(age_structured == FALSE){
     survivors[[k]] <- record_cohort_survivors(pop, k, lesion_formation_rate)
     }else{
-    pop_size[[k]] <- data.frame(year = k, n = length(Alive))
+    pop_size[[k]] <- data.frame(year = k+1, n = length(Alive))
     }
  }
   # Once 10 or fewer people are left alive — they all enter the cemetery
@@ -411,10 +418,10 @@ Simulate_Cemetery <- function(pop0_size,
   # Model output
   # for a cohort model
   if(age_structured == FALSE){
-  output <- list(individual_outcomes = pop, survivors = rbind(c("Age" = 0, "Alive" = pop0_size),do.call(rbind, survivors)))
+  output <- list(individual_outcomes = pop, survivors = rbind(c("Age" = 1, "Alive" = pop0_size),do.call(rbind, survivors)))
   } else{
   # for an age-structured population
-    output <- list(individual_outcomes = pop, population_size = do.call(rbind, pop0_size))
+    output <- list(individual_outcomes = pop, population_size = rbind(c("Year" = 1, "n" = pop0_size), do.call(rbind, pop_size)))
   }
   
   return(output)
