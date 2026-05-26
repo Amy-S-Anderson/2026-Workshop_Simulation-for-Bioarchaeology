@@ -121,11 +121,11 @@ create_pop_stable_age <- function(pop0_size,
 #' @param mortality_regime Data frame with Siler parameters (a1, b1, a2, a3, b3)
 #' @return A data frame with columns: agent_id, age, lesion, dead, in_sample
 #' @keywords internal
-create_pop <- function(pop_size, age_structured, 
+create_pop <- function(pop0_size, age_structured, 
                        lesion_formation_rate = NULL, 
                        r = 0, mortality_regime) {
   if(age_structured == TRUE){
-    pop0 <- create_pop_stable_age(pop_size,
+    pop0 <- create_pop_stable_age(pop0_size,
                                   mortality_regime,
                                   lesion_formation_rate = lesion_formation_rate,
                                   r       = r, # pop. growth rate
@@ -133,7 +133,7 @@ create_pop <- function(pop_size, age_structured,
   }
   
   if(age_structured == FALSE){
-    pop0 <- data.frame(agent_id = 1:pop_size,
+    pop0 <- data.frame(agent_id = 1:pop0_size,
                        age = 0,
                        dead = FALSE,
                        was_deposited = FALSE,
@@ -147,7 +147,6 @@ create_pop <- function(pop_size, age_structured,
   }
   return(pop0)
 }
-
 #' Age up all living agents to the current timestep
 #' @param pop Population data frame
 #' @param k Current timestep (age to assign)
@@ -250,13 +249,13 @@ apply_mortality <- function(pop, Alive,
   pop
 }
 
-#' Record survivor snapshot for the current timestep
+#' Record survivor snapshot for the current timestep. This function is only built to handle a cohort, not a full age-structured population. *This could/should be changed*
 #' @param pop Population data frame
 #' @param k Current timestep
 #' @param lesion_formation_rate Annual rate of lesion formation (NULL if not specified)
 #' @return One-row data frame with Age, Alive, Lesion, Lesion_perc
 #' @keywords internal
-record_survivors <- function(pop, k, lesion_formation_rate) {
+record_cohort_survivors <- function(pop, k, lesion_formation_rate) {
   n_alive  <- sum(!pop$dead & pop$age == k)
   n_lesion <- sum(!pop$dead & pop$lesion == 1 & pop$age == k)
   if(is.null(lesion_formation_rate)){
@@ -296,7 +295,7 @@ finalize_cemetery <- function(pop, k) {
 #' Individuals with lesions may experience modified mortality risk. The
 #' simulation ends when fewer than 10 individuals remain alive.
 #'
-#' @param pop_size Integer. Number of individuals in the starting pop.
+#' @param pop0_size Integer. Number of individuals in the starting pop.
 #' @param lesion_formation_rate Numeric. Annual probability of developing a
 #'   lesion (between 0 and 1).
 #' @param formation_window_opens Numeric. Age at which lesions can start
@@ -319,14 +318,14 @@ finalize_cemetery <- function(pop, k) {
 #'
 #' @examples
 #' result <- Simulate_Cemetery(
-#'   pop_size = 500,
+#'   pop0_size = 500,
 #'   lesion_formation_rate = 0.10,
 #'   formation_window_closes = 5,
 #'   mortality_regime = CoaleDemenyWestF5
 #' )
 #'
 #' @export
-Simulate_Cemetery <- function(pop_size,
+Simulate_Cemetery <- function(pop0_size,
                               lesion_formation_rate = NULL,
                               formation_window_opens = 0,
                               formation_window_closes,
@@ -339,18 +338,15 @@ Simulate_Cemetery <- function(pop_size,
                               taphonomy_regime,
                               loss_strength = 'no_decay',
                               age_noise = FALSE) {
-  pop <- create_pop(pop_size, age_structured = age_structured, 
-                    r = pop_growth_rate, mortality_regime)
+  pop <- create_pop(pop0_size, age_structured = age_structured, 
+                    r = pop_growth_rate, lesion_formation_rate = lesion_formation_rate,
+                    mortality_regime = mortality_regime)
   
-  # If lesion_formation_rate is not specified, remove the lesion column from the pop data frame. 
-  if(is.null(lesion_formation_rate)){
-    pop <- pop %>%
-      select(-lesion)
-  }
   k <- 0  # Initialize time counter
   
   # Set up table for survivor output
   survivors <- vector("list", 100)
+  pop_size <- vector("list", 100) # Right now this is hard-coded to count population size each year for 100 years. Will need to update this when I update the model run-time for dynamic populations (not just a single cohort that all die in under 100 years)
   
   # As long as more than 10 people are alive
   while (sum(!pop$dead) >= 10) {
@@ -377,10 +373,13 @@ Simulate_Cemetery <- function(pop_size,
                                   mortality_risk_type,
                                   relative_mortality_risk)
     
-    # Update summary log for survivors
-    survivors[[k]] <- record_survivors(pop, k, lesion_formation_rate)
-  }
-  
+    # Update summary log for survivors. NOTE: Right now, the 'survivors' log isn't set up for age-structured populations. For now, if the model generates an age-structured population, it records population size annually instead.  This is something to come back to in future, but for now, the survivors frequency table isn't particularly important for any of the questions we're applying this model to. 
+    if(age_structured == FALSE){
+    survivors[[k]] <- record_cohort_survivors(pop, k, lesion_formation_rate)
+    }else{
+    pop_size[[k]] <- data.frame(year = k, n = length(Alive))
+    }
+ }
   # Once 10 or fewer people are left alive — they all enter the cemetery
   pop <- finalize_cemetery(pop, k)
   
@@ -410,8 +409,13 @@ Simulate_Cemetery <- function(pop_size,
   pop <- pop %>% dplyr::select(-"dead")
   
   # Model output
-  output <- list(individual_outcomes = pop, survivors = rbind(c("Age" = 0, "Alive" = pop_size),do.call(rbind, survivors))
-                 )
+  # for a cohort model
+  if(age_structured == FALSE){
+  output <- list(individual_outcomes = pop, survivors = rbind(c("Age" = 0, "Alive" = pop0_size),do.call(rbind, survivors)))
+  } else{
+  # for an age-structured population
+    output <- list(individual_outcomes = pop, population_size = do.call(rbind, pop0_size))
+  }
   
   return(output)
 }
