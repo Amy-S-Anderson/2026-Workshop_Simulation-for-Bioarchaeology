@@ -25,13 +25,9 @@
 #' @return Numeric vector of survivorship values, same length as ages
 #' @keywords internal
 compute_siler_survivorship <- function(ages, mortality_regime) {
-  hazards <- sapply(ages, compute_siler_risk, mortality_regime = mortality_regime)
-  # Probability of surviving each discrete year, then cumulative product.
-  # l(0) = 1 by definition, so we prepend 1 and drop the last value to align
-  # with the input age vector.
+  hazards        <- compute_siler_risk(ages, mortality_regime)
   survival_probs <- 1 - hazards
-  lx <- cumprod(c(1, survival_probs[-length(survival_probs)]))
-  lx
+  cumprod(c(1, survival_probs[-length(survival_probs)]))
 }
 
 
@@ -90,7 +86,6 @@ compute_stable_age_distribution <- function(ages, mortality_regime, r = 0) {
 create_pop_stable_age <- function(pop0_size,
                                      mortality_regime,
                                      r       = 0,
-                                     lesion_formation_rate = NULL,
                                      max_age = 100) {
   ages <- 0:max_age
   
@@ -99,35 +94,30 @@ create_pop_stable_age <- function(pop0_size,
   # Sample each agent's starting age from the stable age distribution
   starting_ages <- sample(ages, size = pop0_size, replace = TRUE, prob = sad)
   
-  pop0 <- data.frame(
+   data.frame(
     agent_id     = 1:pop0_size,
     age          = as.numeric(starting_ages),
     dead         = FALSE,
     was_deposited = FALSE,
     in_sample    = TRUE
   )
-  if(!is.null(lesion_formation_rate )){
-    pop0 <- pop0 %>%
-      mutate(lesion = 0L) %>%
-      relocate(lesion, .after = age)
-  }
-  return(pop0)
 }
 
 #' @param pop_size Number of agents in the starting pop
 #' @param age_structured Logical: is this an age-structured population? (if not, it is a single age-cohort)
-#' @param lesion_formation_rate Numeric, but functions as Logical. It will call the param value for this argument from the Simulate_Cemetery function call. If lesion_formation_rate has any numeric value, then a column for lesion presence is initialized; no one has lesions at time = 0. 
+#' @param model_lesions Logical. If true, then a column for lesion presence is initialized; no one has lesions at time = 0. 
+#' @param lesion_formation_window Vector length 2: c(age at which window opens, age at which window closes) 
 #' @param r Numeric, the population growth rate
 #' @param mortality_regime Data frame with Siler parameters (a1, b1, a2, a3, b3)
 #' @return A data frame with columns: agent_id, age, lesion, dead, in_sample
 #' @keywords internal
 create_pop <- function(pop0_size, age_structured, 
-                       lesion_formation_rate = NULL, 
+                       model_lesions, 
+                       lesion_formation_window,
                        r = 0, mortality_regime) {
   if(age_structured == TRUE){
     pop0 <- create_pop_stable_age(pop0_size,
                                   mortality_regime,
-                                  lesion_formation_rate = lesion_formation_rate,
                                   r       = r, # pop. growth rate
                                   max_age = 100)
   }
@@ -139,14 +129,16 @@ create_pop <- function(pop0_size, age_structured,
                        was_deposited = FALSE,
                        in_sample = TRUE
     )
-    if(!is.null(lesion_formation_rate)){
-      pop0 <- pop0 %>%
-        mutate(lesion = 0L) %>%
-        relocate(lesion, .after = age) # change position of lesion column so it sits to the right of 'age'
-    }
   }
-  return(pop0)
-}
+    if(model_lesions){
+      pop0$lesion <- if_else(pop0$age %in% lesion_formation_window[1]:lesion_formation_window[2], 0, NA)
+      }
+    pop0 <- pop0 %>% relocate(lesion, .after = age) # change position of lesion column so it sits to the right of 'age'
+   
+     return(pop0)
+    }
+
+
 #' Age up all living agents to the current timestep
 #' @param pop Population data frame
 #' @param k Current timestep (age to assign)
@@ -164,15 +156,151 @@ age_pop <- function(pop, k) {
 #' @return Numeric hazard value
 #' @keywords internal
 compute_siler_risk <- function(ages, mortality_regime) {
-  if(length(unique(ages)) == 1){ # if all agents are the same age
-    mortality_regime$a1 * exp(-mortality_regime$b1 * ages[1]) + # calculate a scalar
-      mortality_regime$a2 +
-      mortality_regime$a3 * exp(mortality_regime$b3 * ages[1])
-  } else{ # otherwise, calculate a vector of age-dependent values, length = n living agents
     mortality_regime$a1 * exp(-mortality_regime$b1 * ages) +
       mortality_regime$a2 +
       mortality_regime$a3 * exp(mortality_regime$b3 * ages)
   }
+
+
+# ------------------------------------------------------------------------------
+# Fertility module for Persephone ABM
+# ------------------------------------------------------------------------------
+
+
+#' Compute a trapezoid age-specific fertility schedule from a TFR
+#'
+#' The schedule rises linearly from 0 at age_start to a peak at age_peak_start,
+#' remains flat to age_peak_end, then falls linearly back to 0 at age_end.
+#' The peak rate is derived analytically so that the sum of ASFRs across all
+#' ages equals the TFR (i.e. the schedule integrates correctly by construction).
+#'
+#' @param ages Integer vector of ages to compute the schedule over
+#' @param tfr Numeric. Total Fertility Rate (expected lifetime births per woman)
+#' @param age_start Numeric. Age at which fertility begins. Default 15.
+#' @param age_peak_start Numeric. Age at which fertility reaches its peak. Default 25.
+#' @param age_peak_end Numeric. Age at which fertility begins to decline. Default 35.
+#' @param age_end Numeric. Age at which fertility reaches zero. Default 45.
+#' @return Named numeric vector of annual age-specific fertility rates
+#' @keywords internal
+compute_trapezoid_asfr <- function(ages, tfr,
+                                   age_start = 15, age_peak_start = 25,
+                                   age_peak_end = 35, age_end = 45) {
+  flat_width      <- age_peak_end   - age_peak_start
+  ramp_up_width   <- age_peak_start - age_start
+  ramp_down_width <- age_end        - age_peak_end
+  area_per_peak   <- flat_width + ramp_up_width / 2 + ramp_down_width / 2
+  peak_asfr       <- tfr / area_per_peak
+  
+  asfr <- dplyr::case_when(
+    ages <  age_start      ~ 0,
+    ages <  age_peak_start ~ peak_asfr * (ages - age_start)  / ramp_up_width,
+    ages <= age_peak_end   ~ peak_asfr,
+    ages <  age_end        ~ peak_asfr * (age_end - ages)    / ramp_down_width,
+    TRUE               ~ 0
+  )
+  
+  setNames(asfr, ages)
+}
+
+
+#' Generate new agent rows to append to the pop
+#'
+#' Creates n_births new agents with age 0 and no lesion, with agent_ids
+#' continuing sequentially from the current maximum in the population. All other
+#' columns are initialized to match the structure of create_pop().
+#'
+#' @param pop Population data frame (used to determine next agent_id)
+#' @param n_births Integer. Number of new agents to create.
+#' @param model_lesions Logical. If FALSE, no lesion column is initalized. 
+#' @return Data frame with n_births rows ready to rbind() onto the population
+#' @keywords internal
+generate_births <- function(pop, n_births, model_lesions) {
+  if (n_births == 0L) return(pop[0L, ])  # empty frame with correct columns
+  
+  next_id <- max(pop$agent_id) + 1L
+  babies <- data.frame(agent_id = seq(next_id, next_id + n_births - 1L),
+                     age = 0,
+                     dead = FALSE,
+                     was_deposited = FALSE,
+                     in_sample = TRUE
+  )
+  if(model_lesions){
+    babies <- babies %>%
+      mutate(lesion = 0L) %>%
+      relocate(lesion, .after = age)
+  }
+  return (babies)
+}
+
+
+
+#' Apply fertility to the living population for one timestep
+#'
+#' Determines how many births occur this timestep and appends new agents to
+#' the pop. The number of births is drawn from a Poisson distribution whose
+#' rate equals the sum of age-specific fertility rates across all reproductive-
+#' age women in the living population.
+#'
+#' Women are approximated as half of all living agents aged between age_start
+#' and age_end (inclusive). This assumption can be replaced once sex is added
+#' as a column to the pop data frame, by filtering on pop$sex == "F"
+#' instead.
+#'
+#' Birth counts are drawn as Poisson rather than Bernoulli because multiple
+#' births can occur at a given age in a population of any size, and the Poisson
+#' approximation to the sum of many independent Bernoulli trials is exact in
+#' the limit of large population and small per-individual rate.
+#'
+#' @param pop Population data frame
+#' @param Alive Integer vector of row indices for living agents
+#' @param tfr Numeric. Total Fertility Rate.
+#' @param lesions Anything, or Null. If != Null, the lesions column is initialized with 0's. 
+#' @param asfr Named numeric vector of age-specific fertility rates, as
+#'   returned by compute_trapezoid_asfr(). The names must be character
+#'   representations of integer ages.
+#' @param dx Numeric. Timestep size. Scales fertility rates proportionally.
+#'   Default 1 (annual timestep).
+#' @return Updated pop data frame with new agents appended
+#' @keywords internal
+apply_fertility <- function(pop, Alive, tfr, asfr, dx = 1, model_lesions) {
+  
+  # Ages of all living agents
+  ages_alive <- pop$age[Alive]
+  
+  # Identify reproductive-age agents and approximate females as half of them
+  repro_ages    <- as.numeric(names(asfr))
+  in_repro_window <- ages_alive %in% repro_ages
+  
+  repro_agents  <- Alive[in_repro_window]
+  repro_ages_actual <- pop$age[repro_agents]
+  
+  # Approximate females as half the reproductive-age living population.
+  # When sex becomes a pop column, replace this block with:
+  #   female_agents <- repro_agents[pop$sex[repro_agents] == "F"]
+  #   female_ages   <- pop$age[female_agents]
+  n_repro       <- length(repro_agents)
+  n_female_approx <- round(n_repro / 2)
+  
+  if (n_female_approx == 0L) return(pop)  # no reproductive-age women
+  
+  # Expected births = sum of ASFR at each female's age, scaled by dx.
+  # We sample ages for our approximate females proportional to their
+  # representation in the reproductive-age pool, then look up their ASFR.
+  female_age_sample <- sample(repro_ages_actual,
+                              size    = n_female_approx,
+                              replace = FALSE)
+  
+  asfr_values    <- asfr[as.character(female_age_sample)]
+  expected_births <- sum(asfr_values * dx)
+  
+  # Draw realized births from a Poisson distribution
+  n_births <- rpois(1, lambda = expected_births)
+  
+  # Append new agents to the pop and return
+  new_agents <- generate_births(pop, n_births, model_lesions)
+  pop <- rbind(pop, new_agents)
+  
+  pop
 }
 
 
@@ -202,7 +330,7 @@ form_lesions <- function(pop, Alive,
   # An agent acquires a lesion if: in the formation window, stress roll passes,
   # AND it does not already have a lesion (pmax preserves previously acquired lesions)
   new_lesion <- as.integer(in_window & stress <= lesion_formation_rate)
-  pop$lesion[Alive] <- pmax(pop$lesion[Alive], new_lesion)
+  pop$lesion[Alive] <- pmax(pop$lesion[Alive], new_lesion, na.rm = TRUE)
   
   pop
 }
@@ -224,24 +352,24 @@ apply_mortality <- function(pop, Alive,
   death_dice <- runif(length(Alive), 0, 1)
   
   ages   <- pop$age[Alive]
-  lesion <- pop$lesion[Alive]
+  has_lesions <- "lesion" %in% names(pop) # does the lesion column exist in this simulation?
   
   # Compute the effective death threshold for each agent.
   # case_when() evaluates conditions row-wise (element-wise on vectors), so
   # each agent follows exactly one branch — logically equivalent to the
   # original nested ifelse() but readable and easy to extend.
-  if(length(lesion) > 0){
+  if(has_lesions){
   threshold <- dplyr::case_when(
-    lesion == 0 ~
+    pop$lesion == 0 ~
       age_based_risk,
     
-    lesion == 1 & mortality_risk_type == "proportional" ~
+    pop$lesion == 1 & mortality_risk_type == "proportional" ~
       age_based_risk * relative_mortality_risk,
     
-    lesion == 1 & mortality_risk_type == "time_decreasing" ~
+    pop$lesion == 1 & mortality_risk_type == "time_decreasing" ~
       age_based_risk * relative_mortality_risk / ((ages / 10) + relative_mortality_risk),
     
-    lesion == 1 & mortality_risk_type == "time_increasing" ~
+    pop$lesion == 1 & mortality_risk_type == "time_increasing" ~
       age_based_risk * ((ages / 10) + relative_mortality_risk) / relative_mortality_risk,
     
     .default = age_based_risk   # fallback: treat as no-lesion baseline
@@ -259,21 +387,21 @@ apply_mortality <- function(pop, Alive,
 #' Record survivor snapshot for the current timestep. This function is only built to handle a cohort, not a full age-structured population. *This could/should be changed*
 #' @param pop Population data frame
 #' @param k Current timestep
-#' @param lesion_formation_rate Annual rate of lesion formation (NULL if not specified)
+#' @param model_lesions Logical
 #' @return One-row data frame with Age, Alive, Lesion, Lesion_perc
 #' @keywords internal
-record_cohort_survivors <- function(pop, k, lesion_formation_rate) {
+record_cohort_survivors <- function(pop, k, model_lesions) {
   n_alive  <- sum(!pop$dead & pop$age == k)
   n_lesion <- sum(!pop$dead & pop$lesion == 1 & pop$age == k)
-  if(is.null(lesion_formation_rate)){
-    data.frame(Age = k,
-               Alive = n_alive)
-  }
-  else{
+  if(model_lesions){
     data.frame(Age = k,
                Alive = n_alive,
                Lesion = n_lesion,
                Lesion_perc = ifelse(n_alive == 0, NA, round(n_lesion / n_alive * 100, 1)))
+  }
+  else{
+    data.frame(Age = k,
+               Alive = n_alive)
   }
 }
 
@@ -312,6 +440,7 @@ finalize_cemetery <- function(pop, k) {
 #'   "proportional", "time_decreasing", or "time_increasing".
 #' @param relative_mortality_risk Numeric. Mortality multiplier for individuals
 #'   with lesions. 1 = no effect, 2 = double risk. Default 1.
+#' @param tfr Numeric. Total fertility rate. 
 #' @param mortality_regime Data frame with Siler parameters (a1, b1, a2, a3, b3).
 #' @param pop_growth_rate Numeric. The population growth rate
 #' @param age_structured Logical. Is the starting population age-structured, or an age cohort?
@@ -333,11 +462,14 @@ finalize_cemetery <- function(pop, k) {
 #'
 #' @export
 Simulate_Cemetery <- function(pop0_size,
+                              dx = 1, 
+                              max_years = 100,
                               lesion_formation_rate = NULL,
                               formation_window_opens = 0,
-                              formation_window_closes,
+                              formation_window_closes = 0,
                               mortality_risk_type = "proportional",
                               relative_mortality_risk = 1,
+                              tfr,
                               mortality_regime,
                               pop_growth_rate = 0, # default to stationary population
                               age_structured = TRUE,
@@ -345,15 +477,34 @@ Simulate_Cemetery <- function(pop0_size,
                               taphonomy_regime,
                               loss_strength = 'no_decay',
                               age_noise = FALSE) {
-  pop <- create_pop(pop0_size, age_structured = age_structured, 
-                    r = pop_growth_rate, lesion_formation_rate = lesion_formation_rate,
-                    mortality_regime = mortality_regime)
+  
+  # check: return message if user chooses nonsensical combination of argument values.
+  if (!is.null(lesion_formation_rate) && formation_window_closes == 0) {
+    warning("lesion_formation_rate is set but formation_window_closes is 0: no lesions will form.")
+  }
+  
+  # Logical: Does this simulation include skeletal lesion formation?
+  model_lesions <- !is.null(lesion_formation_rate)
   
   k <- 0  # Initialize time counter
   
+  # Generate starting cohort or age-structured population at k = 0.
+  pop <- create_pop(pop0_size, age_structured = age_structured, 
+                    r = pop_growth_rate, 
+                    model_lesions = model_lesions,
+                    lesion_formation_window = c(formation_window_opens, formation_window_closes),
+                    mortality_regime = mortality_regime)
+  
+  # Calculate age-specific fertility rate, based on total fertility rate.
+  if(age_structured == TRUE){
+    asfr <- compute_trapezoid_asfr(ages = 0:100, tfr = tfr)
+  }
+
   # Set up table for survivor output
   survivors <- vector("list", 100)
   pop_size <- vector("list", 100) # Right now this is hard-coded to count population size each year for 100 years. Will need to update this when I update the model run-time for dynamic populations (not just a single cohort that all die in under 100 years)
+  decedents <- vector("list", max_years)
+  
   
   # As long as more than 10 people are alive
   while (sum(!pop$dead) >= 10) {
@@ -361,26 +512,46 @@ Simulate_Cemetery <- function(pop0_size,
     pop <- age_pop(pop, k)
     Alive <- which(!pop$dead)
     
-    # Baseline Siler mortality risk for this age (vector if the population is age-structured; scalar if the population is an age cohort)
+    # Baseline age-dependent Siler mortality risk for all individuals (vector if the population is age-structured; scalar if the population is an age cohort)
 age_based_risk <- compute_siler_risk(ages = pop[Alive,]$age, mortality_regime = mortality_regime) ###### Need to update this function. It relies on k, the time marker, which is only equivalent to agent age when the model generates a cohort and not an age-structured population.
     
     # Vectorized lesion formation and mortality across all living agents.
     # Each agent receives its own independent draw; case_when() dispatches
     # each agent through the correct mortality branch element-wise.
-    if(!is.null(lesion_formation_rate)){
+    if(model_lesions){
+      
+      # Bones change.
       pop <- form_lesions(pop, Alive,
                                  formation_window_opens,
                                  formation_window_closes,
                                  lesion_formation_rate)
     }
     
-    
+    # The Reaper comes.
     pop <- apply_mortality(pop, Alive,
                                   age_based_risk,
                                   mortality_risk_type,
                                   relative_mortality_risk)
     
+    # Bring out yer dead. 
+    decedents[[k]]        <- pop[pop$dead, ]
+    if(nrow(decedents[[k]]) > 0){ # if anyone died
+      decedents[[k]]$year_died <- k # record the year of their death
+    }
+
+    # Separate the dead from the living. 
+    pop                  <- pop[!pop$dead, ]
+    
+    if(age_structured == TRUE){
+      # The stork visits.
+    pop                  <- apply_fertility(pop, Alive, tfr = tfr, 
+                                            asfr = asfr, dx = dx, model_lesions = model_lesions)  
+    }
+    # NOTE: Every call to apply_fertility() does rbind(pop, new_agents), which copies the entire population data frame. For a long-running simulation with high fertility this compounds quickly. The same list-then-bind pattern you've already applied to survivors would help here: accumulate new birth batches in a list and bind them to pop every N timesteps or at the end of the simulation. That said, this is a lower priority optimization than the others — worth flagging for when you're tuning for large populations.
+    
+    
     # Update summary log for survivors. NOTE: Right now, the 'survivors' log isn't set up for age-structured populations. For now, if the model generates an age-structured population, it records population size annually instead. It doesn't track lesion frequency in the population as a whole. This is something to come back to in future, but for now, the survivors frequency table isn't particularly important for any of the questions we're applying this model to. 
+    
     if(age_structured == FALSE){
     survivors[[k]] <- record_cohort_survivors(pop, k, lesion_formation_rate)
     }else{
@@ -418,10 +589,10 @@ age_based_risk <- compute_siler_risk(ages = pop[Alive,]$age, mortality_regime = 
   # Model output
   # for a cohort model
   if(age_structured == FALSE){
-  output <- list(individual_outcomes = pop, survivors = rbind(c("Age" = 1, "Alive" = pop0_size),do.call(rbind, survivors)))
+  output <- list(individual_outcomes = do.call(rbind, decedents), survivors = rbind(c("Age" = 1, "Alive" = pop0_size),do.call(rbind, survivors)))
   } else{
   # for an age-structured population
-    output <- list(individual_outcomes = pop, population_size = rbind(c("Year" = 1, "n" = pop0_size), do.call(rbind, pop_size)))
+    output <- list(individual_outcomes = do.call(rbind, decedents), population_size = rbind(c("Year" = 1, "n" = pop0_size), do.call(rbind, pop_size)))
   }
   
   return(output)
