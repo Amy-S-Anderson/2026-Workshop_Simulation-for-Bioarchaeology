@@ -15,6 +15,7 @@
 #' Create the initial pop data frame
 #' 
 #' 
+#` ###### @Saige, compute_siler_risk() is where we should implement the demohaz robust parameters, right?
 #' Compute discrete Siler survivorship l(x)
 #'
 #' Returns the probability of surviving from birth to each age x, under the
@@ -131,9 +132,10 @@ create_pop <- function(pop0_size, age_structured,
     )
   }
     if(model_lesions){
-      pop0$lesion <- if_else(pop0$age %in% lesion_formation_window[1]:lesion_formation_window[2], 0, NA)
+      pop0 <- pop0 %>%
+        mutate(lesion = if_else(pop0$age %in% lesion_formation_window[1]:lesion_formation_window[2], 0, NA_real_)) %>% 
+        relocate(lesion, .after = age) # change position of lesion column so it sits to the right of 'age'
       }
-    pop0 <- pop0 %>% relocate(lesion, .after = age) # change position of lesion column so it sits to the right of 'age'
    
      return(pop0)
     }
@@ -145,11 +147,11 @@ create_pop <- function(pop0_size, age_structured,
 #' @return Updated pop data frame
 #' @keywords internal
 age_pop <- function(pop, k) {
-  Alive <- which(!pop$dead)
-  pop$age[Alive] <- k
+  pop$age <- pop$age + 1
   pop
 }
 
+#### @Saige: demohaz robust Siler parameters go here? Or we can just save the mortality regime parameter values as the robust ones. But for most users, I think we want to build in a transformation so they don't accidentally feed the wrong parameterization into the model and have it fail silently. 
 #' Compute Siler hazard for a given age
 #' @param ages Integer vector, if population is age-structured
 #' @param mortality_regime Data frame with Siler parameters (a1, b1, a2, a3, b3)
@@ -252,7 +254,6 @@ generate_births <- function(pop, n_births, model_lesions) {
 #' the limit of large population and small per-individual rate.
 #'
 #' @param pop Population data frame
-#' @param Alive Integer vector of row indices for living agents
 #' @param tfr Numeric. Total Fertility Rate.
 #' @param lesions Anything, or Null. If != Null, the lesions column is initialized with 0's. 
 #' @param asfr Named numeric vector of age-specific fertility rates, as
@@ -262,46 +263,29 @@ generate_births <- function(pop, n_births, model_lesions) {
 #'   Default 1 (annual timestep).
 #' @return Updated pop data frame with new agents appended
 #' @keywords internal
-apply_fertility <- function(pop, Alive, tfr, asfr, dx = 1, model_lesions) {
+apply_fertility <- function(pop, tfr, asfr, dx = 1, model_lesions) {
   
-  # Ages of all living agents
-  ages_alive <- pop$age[Alive]
+  repro_ages      <- as.numeric(names(asfr))
+  in_repro_window <- pop$age %in% repro_ages
+  repro_ages_actual <- pop$age[in_repro_window]
   
-  # Identify reproductive-age agents and approximate females as half of them
-  repro_ages    <- as.numeric(names(asfr))
-  in_repro_window <- ages_alive %in% repro_ages
-  
-  repro_agents  <- Alive[in_repro_window]
-  repro_ages_actual <- pop$age[repro_agents]
-  
-  # Approximate females as half the reproductive-age living population.
-  # When sex becomes a pop column, replace this block with:
-  #   female_agents <- repro_agents[pop$sex[repro_agents] == "F"]
-  #   female_ages   <- pop$age[female_agents]
-  n_repro       <- length(repro_agents)
+  n_repro         <- sum(in_repro_window)
   n_female_approx <- round(n_repro / 2)
   
-  if (n_female_approx == 0L) return(pop)  # no reproductive-age women
+  if (n_female_approx == 0L) return(pop)
   
-  # Expected births = sum of ASFR at each female's age, scaled by dx.
-  # We sample ages for our approximate females proportional to their
-  # representation in the reproductive-age pool, then look up their ASFR.
   female_age_sample <- sample(repro_ages_actual,
                               size    = n_female_approx,
                               replace = FALSE)
   
-  asfr_values    <- asfr[as.character(female_age_sample)]
+  asfr_values     <- asfr[as.character(female_age_sample)]
   expected_births <- sum(asfr_values * dx)
+  n_births        <- rpois(1, lambda = expected_births)
   
-  # Draw realized births from a Poisson distribution
-  n_births <- rpois(1, lambda = expected_births)
-  
-  # Append new agents to the pop and return
   new_agents <- generate_births(pop, n_births, model_lesions)
-  pop <- rbind(pop, new_agents)
-  
-  pop
+  rbind(pop, new_agents)
 }
+  
 
 
 #' Vectorized lesion formation across all living agents
@@ -311,26 +295,20 @@ apply_fertility <- function(pop, Alive, tfr, asfr, dx = 1, model_lesions) {
 #' element-wise so individual-level heterogeneity is preserved.
 #'
 #' @param pop Population data frame
-#' @param Alive Integer vector of row indices for living agents
 #' @param formation_window_opens Age at which lesions can start forming
 #' @param formation_window_closes Age at which lesions stop forming
 #' @param lesion_formation_rate Annual probability of lesion formation
 #' @return Updated pop data frame
 #' @keywords internal
-form_lesions <- function(pop, Alive,
-                             formation_window_opens,
-                             formation_window_closes,
-                             lesion_formation_rate) {
-  # One draw per living agent
-  stress <- runif(length(Alive), 0, 1)
+form_lesions <- function(pop,
+                         formation_window_opens,
+                         formation_window_closes,
+                         lesion_formation_rate) {
+  stress <- runif(nrow(pop), 0, 1)
   
-  ages   <- pop$age[Alive]
-  in_window <- ages >= formation_window_opens & ages <= formation_window_closes
-  
-  # An agent acquires a lesion if: in the formation window, stress roll passes,
-  # AND it does not already have a lesion (pmax preserves previously acquired lesions)
+  in_window  <- pop$age >= formation_window_opens & pop$age <= formation_window_closes
   new_lesion <- as.integer(in_window & stress <= lesion_formation_rate)
-  pop$lesion[Alive] <- pmax(pop$lesion[Alive], new_lesion, na.rm = TRUE)
+  pop$lesion <- pmax(pop$lesion, new_lesion, na.rm = TRUE)
   
   pop
 }
@@ -345,13 +323,13 @@ form_lesions <- function(pop, Alive,
 #' @param relative_mortality_risk Multiplier for lesion-bearing individuals
 #' @return Updated pop data frame
 #' @keywords internal
-apply_mortality <- function(pop, Alive,
-                                age_based_risk,
-                                mortality_risk_type,
-                                relative_mortality_risk) {
-  death_dice <- runif(length(Alive), 0, 1)
+apply_mortality <- function(pop, 
+                            age_based_risk,
+                            mortality_risk_type,
+                            relative_mortality_risk) {
+  death_dice <- runif(nrow(pop), 0, 1)
   
-  ages   <- pop$age[Alive]
+  ages   <- pop$age
   has_lesions <- "lesion" %in% names(pop) # does the lesion column exist in this simulation?
   
   # Compute the effective death threshold for each agent.
@@ -379,7 +357,7 @@ apply_mortality <- function(pop, Alive,
     
   }
   
-  pop$dead[Alive] <- pop$dead[Alive] | (death_dice < threshold)
+  pop$dead <- pop$dead | (death_dice < threshold)
   
   pop
 }
@@ -412,12 +390,18 @@ record_cohort_survivors <- function(pop, k, model_lesions) {
 #' @param k Last completed timestep
 #' @return Data frame with all agents marked dead
 #' @keywords internal
-finalize_cemetery <- function(pop, k) {
+finalize_cemetery <- function(pop, decedents, k) {
   k <- k + 1
   Alive <- which(!pop$dead)
-  pop$age[Alive] <- k
-  pop$dead <- TRUE
-  pop
+  if(length(Alive) > 10){
+    print("Too many agents are still alive -- don't kill them all yet!")
+  }
+  else{
+    pop$age[Alive] <- k
+    pop$dead[Alive] <- "dead"
+    decedents[[k]] <- pop[,! colnames(pop) %in% c("dead") ]
+    decedents[[k]]$year_died <- k
+  }
 }
 
 
@@ -431,6 +415,8 @@ finalize_cemetery <- function(pop, k) {
 #' simulation ends when fewer than 10 individuals remain alive.
 #'
 #' @param pop0_size Integer. Number of individuals in the starting pop.
+#' @param dx Numeric. Size of the timestep in which all other model actions are applied.
+#' @param max_years. Integer. Number of years to run the simulation, given that the population doesn't crash before then. 
 #' @param lesion_formation_rate Numeric. Annual probability of developing a
 #'   lesion (between 0 and 1).
 #' @param formation_window_opens Numeric. Age at which lesions can start
@@ -444,7 +430,11 @@ finalize_cemetery <- function(pop, k) {
 #' @param mortality_regime Data frame with Siler parameters (a1, b1, a2, a3, b3).
 #' @param pop_growth_rate Numeric. The population growth rate
 #' @param age_structured Logical. Is the starting population age-structured, or an age cohort?
-#' @return A list with two elements:
+#' @param deposition_param
+#' @param taphonomy_regime
+#' @param loss_strength
+#' @param age_noise
+#' @return A list with two elements
 #'   \describe{
 #'     \item{individual_outcomes}{Data frame of all individuals with age at
 #'       death and lesion status.}
@@ -465,13 +455,13 @@ Simulate_Cemetery <- function(pop0_size,
                               dx = 1, 
                               max_years = 100,
                               lesion_formation_rate = NULL,
-                              formation_window_opens = 0,
+                              formation_window_opens = 0, #### @ I'd like to change this to a c(0,0) style vector called 'lesion_formation_window'
                               formation_window_closes = 0,
                               mortality_risk_type = "proportional",
                               relative_mortality_risk = 1,
-                              tfr,
+                              tfr, # @ haven't tried this with non-integer values yet.
                               mortality_regime,
-                              pop_growth_rate = 0, # default to stationary population
+                              pop_growth_rate = 0, # defaults to stationary population
                               age_structured = TRUE,
                               deposition_param = 0,
                               taphonomy_regime,
@@ -500,91 +490,79 @@ Simulate_Cemetery <- function(pop0_size,
     asfr <- compute_trapezoid_asfr(ages = 0:100, tfr = tfr)
   }
 
-  # Set up table for survivor output
-  survivors <- vector("list", 100)
-  pop_size <- vector("list", 100) # Right now this is hard-coded to count population size each year for 100 years. Will need to update this when I update the model run-time for dynamic populations (not just a single cohort that all die in under 100 years)
+  # Set up lists to track output
+  survivors <- vector("list", max_years)
+  pop_size <- vector("list", max_years) 
   decedents <- vector("list", max_years)
   
   
   # As long as more than 10 people are alive
-  while (sum(!pop$dead) >= 10) {
-    k <- k + 1  # Increment time
+  while (nrow(pop) >= 10) {
+    k <- k + 1
     pop <- age_pop(pop, k)
-    Alive <- which(!pop$dead)
     
-    # Baseline age-dependent Siler mortality risk for all individuals (vector if the population is age-structured; scalar if the population is an age cohort)
-age_based_risk <- compute_siler_risk(ages = pop[Alive,]$age, mortality_regime = mortality_regime) ###### Need to update this function. It relies on k, the time marker, which is only equivalent to agent age when the model generates a cohort and not an age-structured population.
+    age_based_risk <- compute_siler_risk(ages = pop$age, mortality_regime = mortality_regime)
     
-    # Vectorized lesion formation and mortality across all living agents.
-    # Each agent receives its own independent draw; case_when() dispatches
-    # each agent through the correct mortality branch element-wise.
-    if(model_lesions){
-      
-      # Bones change.
-      pop <- form_lesions(pop, Alive,
-                                 formation_window_opens,
-                                 formation_window_closes,
-                                 lesion_formation_rate)
+    # Bones change.
+    if (model_lesions) {
+      pop <- form_lesions(pop,
+                          formation_window_opens,
+                          formation_window_closes,
+                          lesion_formation_rate)
     }
     
-    # The Reaper comes.
-    pop <- apply_mortality(pop, Alive,
-                                  age_based_risk,
-                                  mortality_risk_type,
-                                  relative_mortality_risk)
+    # The reaper comes. 
+    pop <- apply_mortality(pop,
+                           age_based_risk,
+                           mortality_risk_type,
+                           relative_mortality_risk)
     
     # Bring out yer dead. 
-    decedents[[k]]        <- pop[pop$dead, ]
-    if(nrow(decedents[[k]]) > 0){ # if anyone died
-      decedents[[k]]$year_died <- k # record the year of their death
+    decedents[[k]] <- pop[pop$dead, !colnames(pop) %in% c("dead")]
+    if (nrow(decedents[[k]]) > 0) {
+      decedents[[k]]$year_died <- k
     }
-
-    # Separate the dead from the living. 
-    pop                  <- pop[!pop$dead, ]
     
-    if(age_structured == TRUE){
-      # The stork visits.
-    pop                  <- apply_fertility(pop, Alive, tfr = tfr, 
-                                            asfr = asfr, dx = dx, model_lesions = model_lesions)  
+    pop <- pop[!pop$dead, ]
+    
+    if (age_structured == TRUE) {
+      # The stork visits. 
+      pop <- apply_fertility(pop, tfr = tfr,
+                             asfr = asfr, dx = dx, model_lesions = model_lesions)
     }
-    # NOTE: Every call to apply_fertility() does rbind(pop, new_agents), which copies the entire population data frame. For a long-running simulation with high fertility this compounds quickly. The same list-then-bind pattern you've already applied to survivors would help here: accumulate new birth batches in a list and bind them to pop every N timesteps or at the end of the simulation. That said, this is a lower priority optimization than the others — worth flagging for when you're tuning for large populations.
     
-    
-    # Update summary log for survivors. NOTE: Right now, the 'survivors' log isn't set up for age-structured populations. For now, if the model generates an age-structured population, it records population size annually instead. It doesn't track lesion frequency in the population as a whole. This is something to come back to in future, but for now, the survivors frequency table isn't particularly important for any of the questions we're applying this model to. 
-    
-    if(age_structured == FALSE){
-    survivors[[k]] <- record_cohort_survivors(pop, k, lesion_formation_rate)
-    }else{
-    pop_size[[k]] <- data.frame(year = k+1, n = length(Alive))
+    if (age_structured == FALSE) {
+      survivors[[k]] <- record_cohort_survivors(pop, k, lesion_formation_rate)
+    } else {
+      pop_size[[k]] <- data.frame(year = k + 1, n = nrow(pop))
     }
- }
+  }
+  
   # Once 10 or fewer people are left alive — they all enter the cemetery
-  pop <- finalize_cemetery(pop, k)
+  decedents[[k]] <- finalize_cemetery(pop, decedents, k)
   
   # Apply deposition bias (if any)
-  pop <- apply_deposition(pop,
-                             deposition_model = 'cutoff',
-                             deposition_param = deposition_param,
-                             dx = 1)
-  pop$in_sample <- pop$was_deposited
-  
+  # decedents <- apply_deposition(decedents,
+  #                            deposition_model = 'cutoff',
+  #                            deposition_param = deposition_param,
+  #                            dx = 1)
+  # decedents$in_sample <- decedents$was_deposited
+  # 
   # Apply preservation bias (if any)
   if (loss_strength != 'no_decay') {
     a_siler <- c(taphonomy_regime$a1, taphonomy_regime$b1,
                  taphonomy_regime$a2, taphonomy_regime$a3,
                  taphonomy_regime$b3)
     b_siler <- demohaz::trad_to_demohaz_siler_param(a_siler)
-    pop <- apply_preservation(pop,
+    decedents <- apply_preservation(decedents,
                                  preservation_model = 'siler',
                                  preservation_param = b_siler,
                                  dx = 1)
   }
   
   # Apply age misestimation (if any)
-  if (age_noise) pop <- apply_estimation_error(pop)
+  if (age_noise) decedents <- apply_estimation_error(decedents)
   
-  # Remove internal columns before returning
-  pop <- pop %>% dplyr::select(-"dead")
   
   # Model output
   # for a cohort model
