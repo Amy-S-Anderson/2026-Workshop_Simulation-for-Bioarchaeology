@@ -105,7 +105,7 @@ create_pop_stable_age <- function(pop0_size,
 
 #' @param pop_size Number of agents in the starting pop
 #' @param age_structured Logical: is this an age-structured population? (if not, it is a single age-cohort)
-#' @param model_lesions Logical. If true, then a column for lesion presence is initialized; no one has lesions at time = 0. 
+#' @param model_lesions Logical. If true, then a column for lesion presence is initialized; no one has lesions atcurrent_time = 0. 
 #' @param lesion_formation_window Vector length 2: c(age at which window opens, age at which window closes) 
 #' @param r Numeric, the population growth rate
 #' @param mortality_regime Data frame with Siler parameters (a1, b1, a2, a3, b3)
@@ -142,10 +142,9 @@ create_pop <- function(pop0_size, age_structured,
 
 #' Age up all living agents to the current timestep
 #' @param pop Population data frame
-#' @param k Current timestep (age to assign)
 #' @return Updated pop data frame
 #' @keywords internal
-age_pop <- function(pop, k) {
+age_pop <- function(pop) {
   pop$age <- pop$age + 1
   pop
 }
@@ -247,9 +246,9 @@ generate_births <- function(pop, n_births, model_lesions) {
 
 
 
-#' Apply fertility to the living population for one timestep
+#' Apply fertility to the living population for onecurrent_timestep
 #'
-#' Determines how many births occur this timestep and appends new agents to
+#' Determines how many births occur thiscurrent_timestep and appends new agents to
 #' the pop. The number of births is drawn from a Poisson distribution whose
 #' rate equals the sum of age-specific fertility rates across all reproductive-
 #' age women in the living population.
@@ -270,8 +269,8 @@ generate_births <- function(pop, n_births, model_lesions) {
 #' @param asfr Named numeric vector of age-specific fertility rates, as
 #'   returned by compute_trapezoid_asfr(). The names must be character
 #'   representations of integer ages.
-#' @param dx Numeric. Timestep size. Scales fertility rates proportionally.
-#'   Default 1 (annual timestep).
+#' @param dx Numeric.current_timestep size. Scales fertility rates proportionally.
+#'   Default 1 (annualcurrent_timestep).
 #' @return Updated pop data frame with new agents appended
 #' @keywords internal
 apply_fertility <- function(pop, tfr, asfr, dx = 1, model_lesions) {
@@ -373,23 +372,23 @@ apply_mortality <- function(pop,
   pop
 }
 
-#' Record survivor snapshot for the current timestep. This function is only built to handle a cohort, not a full age-structured population. *This could/should be changed*
+#' Record survivor snapshot for the currentcurrent_timestep. This function is only built to handle a cohort, not a full age-structured population. *This could/should be changed*
 #' @param pop Population data frame
-#' @param k Current timestep
+#' @paramcurrent_time Currentcurrent_timestep
 #' @param model_lesions Logical
 #' @return One-row data frame with Age, Alive, Lesion, Lesion_perc
 #' @keywords internal
-record_cohort_survivors <- function(pop, k, model_lesions) {
-  n_alive  <- sum(!pop$dead & pop$age == k)
-  n_lesion <- sum(!pop$dead & pop$lesion == 1 & pop$age == k)
+record_cohort_survivors <- function(pop, current_time, model_lesions) {
+  n_alive  <- sum(!pop$dead & pop$age == current_time)
+  n_lesion <- sum(!pop$dead & pop$lesion == 1 & pop$age == current_time)
   if(model_lesions){
-    data.frame(Age = k,
+    data.frame(Age = current_time, # in an age-cohort, time is equivalent to age. 
                Alive = n_alive,
                Lesion = n_lesion,
                Lesion_perc = ifelse(n_alive == 0, NA, round(n_lesion / n_alive * 100, 1)))
   }
   else{
-    data.frame(Age = k,
+    data.frame(Age = current_time,
                Alive = n_alive)
   }
 }
@@ -398,20 +397,19 @@ record_cohort_survivors <- function(pop, k, model_lesions) {
 #'
 #' Ages remaining survivors one final step and marks all as dead.
 #' @param pop Population data frame
-#' @param k Last completed timestep
+#' @paramcurrent_time Last completed timestep
 #' @return Data frame with all agents marked dead
 #' @keywords internal
-finalize_cemetery <- function(pop, decedents, k) {
-  k <- k + 1
-  Alive <- which(!pop$dead)
-  if(length(Alive) > 10){
+finalize_cemetery <- function(pop, decedents, current_time) {
+ current_time <- current_time + 1
+  if(nrow(pop) > 10){
     print("Too many agents are still alive -- don't kill them all yet!")
   }
   else{
-    pop$age[Alive] <- k
-    pop$dead[Alive] <- "dead"
-    decedents[[k]] <- pop[,! colnames(pop) %in% c("dead") ]
-    decedents[[k]]$year_died <- k
+    pop$age <- age_pop(pop) 
+    pop$dead <- "dead"
+    decedents[[current_time]] <- pop[,! colnames(pop) %in% c("dead") ]
+    decedents[[current_time]]$year_died <- current_time 
   }
 }
 
@@ -420,13 +418,13 @@ finalize_cemetery <- function(pop, decedents, k) {
 
 #' Simulate a cemetery using the Persephone ABM
 #'
-#' Runs the Persephone agent-based model: a birth pop ages through time,
+#' Runs the Persephone agent-based model: a birth pop ages throughcurrent_time,
 #' facing annual risks of skeletal lesion formation and Siler-model mortality.
 #' Individuals with lesions may experience modified mortality risk. The
 #' simulation ends when fewer than 10 individuals remain alive.
 #'
 #' @param pop0_size Integer. Number of individuals in the starting pop.
-#' @param dx Numeric. Size of the timestep in which all other model actions are applied.
+#' @param dx Numeric. Size of thecurrent_timestep in which all other model actions are applied.
 #' @param max_years. Integer. Number of years to run the simulation, given that the population doesn't crash before then. 
 #' @param lesion_formation_rate Numeric. Annual probability of developing a
 #'   lesion (between 0 and 1).
@@ -487,9 +485,9 @@ Simulate_Cemetery <- function(pop0_size,
   # Logical: Does this simulation include skeletal lesion formation?
   model_lesions <- !is.null(lesion_formation_rate)
   
-  k <- 0  # Initialize time counter
+current_time <- 0  # Initializecurrent_time counter
   
-  # Generate starting cohort or age-structured population at k = 0.
+  # Generate starting cohort or age-structured population attime = 0.
   pop <- create_pop(pop0_size, age_structured = age_structured, 
                     r = pop_growth_rate, 
                     model_lesions = model_lesions,
@@ -510,13 +508,13 @@ Simulate_Cemetery <- function(pop0_size,
   # As long as more than 10 people are alive
   while (nrow(pop) > 10) {
     
-    # break the loop if the time has exceeded max_years
-    if(k > max_years){
+    # break the loop if thecurrent_time has exceeded max_years
+    if(current_time > max_years){
       break 
     }
     
-    k <- k + 1 #### @ change 'k' to 'time'
-    pop <- age_pop(pop, k)
+   current_time <-current_time + 1
+    pop <- age_pop(pop, current_time)
     
     age_based_risk <- compute_siler_risk(ages = pop$age, mortality_regime = mortality_regime)
     
@@ -535,9 +533,9 @@ Simulate_Cemetery <- function(pop0_size,
                            relative_mortality_risk)
     
     # Bring out yer dead. 
-    decedents[[k]] <- pop[pop$dead, !colnames(pop) %in% c("dead")]
-    if (nrow(decedents[[k]]) > 0) {
-      decedents[[k]]$year_died <- k
+    decedents[[current_time]] <- pop[pop$dead, !colnames(pop) %in% c("dead")]
+    if (nrow(decedents[[current_time]]) > 0) {
+      decedents[[current_time]]$year_died <- current_time 
     }
     
     pop <- pop[!pop$dead, ]
@@ -550,15 +548,15 @@ Simulate_Cemetery <- function(pop0_size,
     }
     
     if (age_structured == FALSE) {
-      survivors[[k]] <- record_cohort_survivors(pop, k, lesion_formation_rate)
+      survivors[[current_time]] <- record_cohort_survivors(pop, current_time, lesion_formation_rate)
     } else {
-      pop_size[[k]] <- data.frame(year = k + 1, n = nrow(pop))
+      pop_size[[current_time]] <- data.frame(year = current_time + 1, n = nrow(pop))
     }
   }
   
-  if(k <= max_years){
+  if(current_time <= max_years){
   # Once 10 or fewer people are left alive — they all enter the cemetery
-  decedents[[k]] <- finalize_cemetery(pop, decedents, k)
+  decedents[[k]] <- finalize_cemetery(pop, decedents, current_time )
   }
   
   # Apply deposition bias (if any)
