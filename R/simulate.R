@@ -15,7 +15,6 @@
 #' Create the initial pop data frame
 #' 
 #' 
-#` ###### @Saige, compute_siler_risk() is where we should implement the demohaz robust parameters, right?
 #' Compute discrete Siler survivorship l(x)
 #'
 #' Returns the probability of surviving from birth to each age x, under the
@@ -157,11 +156,23 @@ age_pop <- function(pop, k) {
 #' @param mortality_regime Data frame with Siler parameters (a1, b1, a2, a3, b3)
 #' @return Numeric hazard value
 #' @keywords internal
-compute_siler_risk <- function(ages, mortality_regime) {
-    mortality_regime$a1 * exp(-mortality_regime$b1 * ages) +
+compute_siler_risk <- function(ages, mortality_regime) { 
+  if (any(mortality_regime < 0)) {
+    stop('No parameters of the mortality regime can be negative')
+  }
+  if(mortality_regime$a3 < 1){ # These are traditional Siler parameters
+    age_based_risk <- mortality_regime$a1 * exp(-mortality_regime$b1 * ages) +
       mortality_regime$a2 +
       mortality_regime$a3 * exp(mortality_regime$b3 * ages)
   }
+  if(mortality_regime$a3 > 1){ # These are robust Siler parameters
+    mortality_regime <- demohaz_to_trad_siler_param(mortality_regime)
+    age_based_risk <- mortality_regime$a1 * exp(-mortality_regime$b1 * ages) +
+      mortality_regime$a2 +
+      mortality_regime$a3 * exp(mortality_regime$b3 * ages)
+  }
+  age_based_risk
+}
 
 
 # ------------------------------------------------------------------------------
@@ -497,8 +508,14 @@ Simulate_Cemetery <- function(pop0_size,
   
   
   # As long as more than 10 people are alive
-  while (nrow(pop) >= 10) {
-    k <- k + 1
+  while (nrow(pop) > 10) {
+    
+    # break the loop if the time has exceeded max_years
+    if(k > max_years){
+      break 
+    }
+    
+    k <- k + 1 #### @ change 'k' to 'time'
     pop <- age_pop(pop, k)
     
     age_based_risk <- compute_siler_risk(ages = pop$age, mortality_regime = mortality_regime)
@@ -526,6 +543,7 @@ Simulate_Cemetery <- function(pop0_size,
     pop <- pop[!pop$dead, ]
     
     if (age_structured == TRUE) {
+      
       # The stork visits. 
       pop <- apply_fertility(pop, tfr = tfr,
                              asfr = asfr, dx = dx, model_lesions = model_lesions)
@@ -538,8 +556,10 @@ Simulate_Cemetery <- function(pop0_size,
     }
   }
   
+  if(k <= max_years){
   # Once 10 or fewer people are left alive — they all enter the cemetery
   decedents[[k]] <- finalize_cemetery(pop, decedents, k)
+  }
   
   # Apply deposition bias (if any)
   # decedents <- apply_deposition(decedents,
