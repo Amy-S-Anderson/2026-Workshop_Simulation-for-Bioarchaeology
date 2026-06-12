@@ -1,0 +1,34 @@
+---
+title: "Fertility demo"
+author: "Amy Anderson"
+date: "2026-06-12"
+output: html_document
+---
+
+# Thursday To-Do:
+
+# 1. Make the test scenarios run DONE!
+# 2. build out functions for iterations and sweeps? DONE!
+# 3. Run all the frailty scenarios. Plot the results. make some sort of sense of them. DONE!
+
+# 4. Write a script for fertility functions demo
+# 5. Can you make the package updated and downloadable? 
+# ...and publish the Shiny app?
+
+# You can do it! 
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Persephone has joined forces with Demeter!
+
+The mortality model you know and love now has fertility built into its population simulation engine. 
+
+# Fertility. 
+# age-structured population -- means I basically have to run through 100 years before I keep anyone, right? a burn-in period to establish a stable age structure based on a stable fertility rate. 
+
+# stationary pop. could be 'however many people died this year, that's how many are born.' Could calculate TFR at the end. 
+
+# ...or, 'however many people died this year, that many plus a percentage of the total population size, that's how many are born. There, we have pop. growth percentage driving the on-the-ground fertility numbers. 
