@@ -1,6 +1,9 @@
 # Persephone ABM
 
-Agent-based model for simulating skeletal lesion formation and mortality in archaeological populations, based on the Usher3 illness-death model.
+An agent-based model (ABM) for simulating skeletal assemblage data in bioarchaeology. Individuals in a birth cohort or age-structured population face annual risks of age-specific mortality following a Siler hazard model and, optionally, annual risks of skeletal lesion formation.  
+  
+  Lesion status can modify mortality risk, enabling exploration of the osteological paradox and evaluation of survival analysis methods or multistate illness-death models applied to cemetery data.
+
 
 ## Installation
 
@@ -52,7 +55,7 @@ devtools::load_all()
 ```
 
 ## Usage
-
+The main function in the package is `Simulate_Cemetery()`. 
 ```r
 library(persephone)
 
@@ -68,5 +71,5 @@ result <- Simulate_Cemetery(
 head(result$individual_outcomes)
 
 # Access survivor data
-head(result$survivors)
+head(result$annual_census)
 ```
