@@ -18,6 +18,7 @@
 #' @param age_end Numeric. Age at which fertility reaches zero. Default 45.
 #' @return Named numeric vector of annual age-specific fertility rates
 #' @keywords internal
+#' @export
 compute_trapezoid_asfr <- function(ages,
                                    tfr,
                                    age_start      = 15,
@@ -59,6 +60,7 @@ compute_trapezoid_asfr <- function(ages,
 #' @param n_births Integer. Number of new agents to create.
 #' @return Data frame with n_births rows ready to rbind() onto the cohort
 #' @keywords internal
+#' @export
 generate_births <- function(cohort, n_births) {
   if (n_births == 0L) return(cohort[0L, ])  # empty frame with correct columns
   
@@ -102,6 +104,7 @@ generate_births <- function(cohort, n_births) {
 #'   Default 1 (annual timestep).
 #' @return Updated cohort data frame with new agents appended
 #' @keywords internal
+#' @export
 apply_fertility <- function(cohort, Alive, tfr, asfr, dx = 1) {
   
   # Ages of all living agents
