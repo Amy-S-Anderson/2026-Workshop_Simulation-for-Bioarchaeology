@@ -16,17 +16,15 @@
 #'   The deposition decision is deterministic: all dead agents at or above
 #'   the cutoff age are deposited; all below are not.
 #'
-#'   Note: This module handles deposition only. Living agents are not
+#'   Note: This module handles deposition only and is applied to the decedents data frame. Living agents are not
 #'   processed. Preservation filtering (whether deposited remains are
 #'   recoverable) is handled by a separate module.
 #'
-#' @param state A data.frame representing the current population state. Must
-#'   contain the following columns:
+#' @param decedents A data.frame representing the full dead population.
+#'   will contain the following columns, and possibly some other agent states:
 #'   \describe{
 #'     \item{agent_id}{Integer. Unique identifier for each agent.}
 #'     \item{age}{Numeric. Age at death for dead agents.}
-#'     \item{lesion}{Logical. TRUE if the agent has a lesion.}
-#'     \item{dead}{Logical. TRUE if the agent is dead, FALSE if alive.}
 #'     \item{was_deposited}{Logical. Will be updated by this function.}
 #'     \item{in_sample}{Logical. TRUE if the agent is in the sample.}
 #'   }
@@ -37,7 +35,7 @@
 #' @param deposition_param Numeric vector containing the deposition parameters.
 #'   For the \code{"cutoff"} model, this must be length 1:
 #'   \describe{
-#'     \item{[1] cutoff_age}{The minimum age for deposition. Dead agents with
+#'     \item{cutoff_age}{The minimum age for deposition. Dead agents with
 #'       age >= cutoff_age are deposited; those below are not.}
 #'   }
 #'
@@ -75,7 +73,7 @@
 #'   module that follows deposition.
 #'
 #' @export
-apply_deposition <- function(state,
+apply_deposition <- function(decedents,
                              deposition_model,
                              deposition_param,
                              dx) {
@@ -106,17 +104,15 @@ apply_deposition <- function(state,
   # Copy state to avoid modifying input
   # ---------------------------------------------------------------------------
 
-  result <- state
+  result <- decedents
 
   # ---------------------------------------------------------------------------
   # Identify dead agents eligible for deposition
   # ---------------------------------------------------------------------------
 
   # Only dead agents can be deposited
-  dead_idx <- which(state$dead)
-
   # If no one is dead, return early
-  if (length(dead_idx) == 0) {
+  if (nrow(decedents) == 0) {
     return(result)
   }
 
@@ -126,9 +122,9 @@ apply_deposition <- function(state,
 
   if (deposition_model == "cutoff") {
     # Deterministic: deposit if age >= cutoff
-    ages <- state$age[dead_idx]
+    ages <- decedents$ages
     deposited <- ages >= cutoff_age
-    deposited_idx <- dead_idx[deposited]
+    deposited_idx <- decedents[deposited]
 
     # Mark deposited agents
     result$was_deposited[deposited_idx] <- TRUE
