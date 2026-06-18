@@ -33,27 +33,35 @@ library(scales)
 
 We simulate 100 cemeteries for each of two scenarios:
 
-1. **Risk-free** (RMR = 1): skeletal lesions have no association with mortality risk.
-2. **Risk-doubled** (RMR = 2): skeletal lesions are associated with double the baseline mortality risk.
+1. **Risk-free** (lesion-related hazard = 1): skeletal lesions have no association with mortality risk.
+2. **Risk-doubled** (lesion-related hazard = 2): skeletal lesions are associated with double the baseline mortality risk.
 
 This produces simulated data on lesion status and age at death for 200,000 individuals total.
 
 ```{r run-simulations}
 nreps <- 100
 params <- get_default_params()
+params$gammafrailty_shape <- NULL
+params$gammafrailty_scale <- NULL
+params$lesion_formation_window <- c(0, 10)
+params$lesion_formation_rate <- 0.05
+params$annual_exposure <- NULL
+params$mortality_regime <- CoaleDemenyWestF15
+
+ # rmr = relative mortality risk (lesion-related hazard)
 
 # Helper to run a scenario (fixed params, varying RMR)
 run_scenario <- function(params, rmr, nreps) {
-  params$relative_mortality_risk <- rmr
+  params$lesion_related_hazard <- rmr
   results <- lapply(1:nreps, function(i) {
     out <- do.call(Simulate_Cemetery, params)
     out$individual_outcomes$rep <- i
-    out$survivors$rep <- i
+    out$annual_census$rep <- i
     out
   })
   list(
     cemetery = bind_rows(lapply(results, `[[`, "individual_outcomes")),
-    survivors = bind_rows(lapply(results, `[[`, "survivors"))
+    annual_census = bind_rows(lapply(results, `[[`, "annual_census"))
   )
 }
 
@@ -67,11 +75,11 @@ results_rmr2 <- run_scenario(params, rmr = 2, nreps = nreps)
 ```{r combine-data}
 # Cemetery data (individual-level outcomes)
 sim_data <- bind_rows(
-  results_rmr1$cemetery %>% mutate(relative_mortality_risk = 1),
-  results_rmr2$cemetery %>% mutate(relative_mortality_risk = 2)
+  results_rmr1$cemetery %>% mutate(lesion_related_hazard = 1),
+  results_rmr2$cemetery %>% mutate(lesion_related_hazard = 2)
 ) %>%
   mutate(
-    scenario = if_else(relative_mortality_risk == 1, "Risk-free", "Risk-doubled"),
+    scenario = if_else(lesion_related_hazard == 1, "Risk-free", "Risk-doubled"),
     Age_Interval = factor(case_when(
       age < 2 ~ "0-1",
       age >= 2 & age < 6 ~ "2-5",
@@ -86,13 +94,13 @@ sim_data <- bind_rows(
     ), levels = c("0-1", "2-5", "6-9", "10-14", "15-19",
                   "20-29", "30-39", "40-49", "50-59", "60+")),
     mortality = "Coale Demeny West F5",
-    relative_risk = as.factor(relative_mortality_risk)
+    relative_risk = as.factor(lesion_related_hazard)
   )
 
 # Survivor data (living cohort at each timestep)
 sim_survivors <- bind_rows(
-  results_rmr1$survivors %>% mutate(relative_risk = as.factor(1)),
-  results_rmr2$survivors %>% mutate(relative_risk = as.factor(2))
+  results_rmr1$annual_census %>% mutate(relative_risk = as.factor(1)),
+  results_rmr2$annual_census %>% mutate(relative_risk = as.factor(2))
 )
 ```
 
@@ -138,7 +146,7 @@ barplot_lesion_frequency_comparison <- ggplot(plot_data_pooled,
                                               aes(x = Age_Interval, y = Lesion_Percent)) +
   geom_col(aes(group = relative_risk, fill = relative_risk), position = "dodge") +
   scale_fill_manual(values = plot_colors) +
-  scale_y_continuous(limits = c(0, 60), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, 70), expand = c(0, 0)) +
   labs(x = "Age at Death (years)", y = "% with Skeletal Lesion") +
   plot_theme +
   theme(legend.position = "none") +
@@ -153,7 +161,7 @@ barplot_sample_age_distributions <- sim_data %>%
   ggplot(aes(x = Age_Interval, y = prop)) +
   geom_col(aes(group = relative_risk, fill = relative_risk), position = "dodge") +
   scale_fill_manual(values = plot_colors) +
-  scale_y_continuous(labels = scales::percent, limits = c(0, .3), expand = c(0, 0)) +
+  scale_y_continuous(labels = scales::percent, limits = c(0, .55), expand = c(0, 0)) +
   labs(x = "Age at Death (years)", y = "% of Cemetery",
        fill = "Lesion-associated Mortality Risk") +
   plot_theme +
@@ -168,7 +176,7 @@ barplots <- plot_grid(barplot_sample_age_distributions,
                       barplot_lesion_frequency_comparison,
                       ncol = 1, labels = "AUTO")
 
-Figure_3 <- plot_grid(barplots, legend, ncol = 1, rel_heights = c(1, 0.05))
+Figure_3 <- plot_grid(barplots, legend, ncol = 1, rel_heights = c(1, 0.1))
 Figure_3
 ```
 
