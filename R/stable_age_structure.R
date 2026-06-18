@@ -2,6 +2,30 @@
 # Stable age distribution initialization for Persephone ABM
 # ------------------------------------------------------------------------------
 
+
+# --- Internal helpers (not exported) ---
+
+#' Create the initial pop data frame
+#' 
+#' 
+#' Compute discrete Siler survivorship l(x)
+#'
+#' Returns the probability of surviving from birth to each age x, under the
+#' Siler hazard model. l(0) is defined as 1 (everyone is alive at birth).
+#'
+#' @param ages Integer vector of ages (typically 0:max_age)
+#' @param mortality_regime Data frame with Siler parameters (a1, b1, a2, a3, b3)
+#' @return Numeric vector of survivorship values, same length as ages
+#' @keywords internal
+#' @export
+compute_siler_survivorship <- function(ages, mortality_regime) {
+  hazards        <- compute_siler_risk(ages, mortality_regime)
+  survival_probs <- 1 - hazards
+  cumprod(c(1, survival_probs[-length(survival_probs)]))
+}
+
+
+
 #' Compute the stable age distribution from Siler parameters
 #'
 #' Derives the proportion of the living population at each age under the
@@ -14,6 +38,7 @@
 #' @param r Numeric. Annual population growth rate. Default 0 (stationary).
 #' @return Numeric vector of proportions summing to 1, same length as ages
 #' @keywords internal
+#' @export
 compute_stable_age_distribution <- function(ages, mortality_regime, r = 0) {
   lx <- compute_siler_survivorship(ages, mortality_regime)
   
@@ -24,6 +49,8 @@ compute_stable_age_distribution <- function(ages, mortality_regime, r = 0) {
   # Normalize to a proper probability distribution
   weights / sum(weights)
 }
+
+
 
 
 #' Initialize a cohort with a stable age distribution
@@ -68,10 +95,10 @@ create_pop_stable_age <- function(pop0_size,
   
   pop0 <- data.frame(
     agent_id     = 1:pop0_size,
-    age          = as.numeric(starting_ages),
-    dead         = FALSE,
-    was_deposited = FALSE,
-    in_sample    = TRUE
+    age          = as.numeric(starting_ages) #,
+    # dead         = FALSE,
+    # was_deposited = FALSE,
+    # in_sample    = TRUE
   )
   if(!is.null(lesion_formation_rate )){
     pop0 <- pop0 %>%
