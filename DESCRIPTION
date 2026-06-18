@@ -19,7 +19,7 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Imports:
     data.table,
-    demohaz (>= 0.1.1),
+    demohaz,
     dplyr,
     doParallel,
     foreach,
@@ -35,7 +35,7 @@ Suggests:
     rmarkdown,
     scales,
     shiny,
-    testthat
+    testthat (>= 3.0.0)
 VignetteBuilder: knitr
 Remotes: 
     MichaelHoltonPrice/demohaz
@@ -43,3 +43,4 @@ Depends:
     R (>= 3.5)
 LazyData: true
 URL: https://amy-s-anderson.github.io/persephone/
+Config/testthat/edition: 3

@@ -24,8 +24,8 @@ create_pop <- function(pop0_size, age_structured,
     if(is.null(mortality_regime)){
       print("You need to specify a mortality regime in order to generate an age-structured population. Check your function arguments. Does mortality_regime = NULL?")
     }
-    pop0 <- create_pop_stable_age(pop0_size,
-                                  mortality_regime,
+    pop0 <- create_pop_stable_age(pop0_size = pop0_size,
+                                  mortality_regime = mortality_regime,
                                   r       = r, # pop. growth rate
                                   max_age = 100)
   }
