@@ -2,17 +2,18 @@
 % Please edit documentation in R/sweep.R
 \name{run_model_reps}
 \alias{run_model_reps}
-\title{Run the model multiple times with identical parameters}
+\title{Run repeated replicates of a single parameter set}
 \usage{
-run_model_reps(params, root_output_directory, numreps = 10)
+run_model_reps(params, root_output_directory, numreps = 100)
 }
 \arguments{
-\item{params}{Named list of simulation parameters}
+\item{params}{Named list of parameters for Simulate_Cemetery}
 
-\item{root_output_directory}{Root directory for saving replicate outputs}
+\item{root_output_directory}{Parent directory for this parameter set}
 
-\item{numreps}{Number of replicates to run}
+\item{numreps}{Integer number of replicates}
 }
 \description{
-Run the model multiple times with identical parameters
+Each replicate is saved in its own rep=N subdirectory under
+root_output_directory.
 }

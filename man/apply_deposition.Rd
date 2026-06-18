@@ -4,16 +4,14 @@
 \alias{apply_deposition}
 \title{Apply Deposition Filtering to Agent Population}
 \usage{
-apply_deposition(state, deposition_model, deposition_param, dx)
+apply_deposition(decedents, deposition_model, deposition_param, dx)
 }
 \arguments{
-\item{state}{A data.frame representing the current population state. Must
-contain the following columns:
+\item{decedents}{A data.frame representing the full dead population.
+will contain the following columns, and possibly some other agent states:
 \describe{
 \item{agent_id}{Integer. Unique identifier for each agent.}
 \item{age}{Numeric. Age at death for dead agents.}
-\item{lesion}{Logical. TRUE if the agent has a lesion.}
-\item{dead}{Logical. TRUE if the agent is dead, FALSE if alive.}
 \item{was_deposited}{Logical. Will be updated by this function.}
 \item{in_sample}{Logical. TRUE if the agent is in the sample.}
 }}
@@ -24,7 +22,7 @@ only \code{"cutoff"} is supported.}
 \item{deposition_param}{Numeric vector containing the deposition parameters.
 For the \code{"cutoff"} model, this must be length 1:
 \describe{
-\item{\link{1} cutoff_age}{The minimum age for deposition. Dead agents with
+\item{cutoff_age}{The minimum age for deposition. Dead agents with
 age >= cutoff_age are deposited; those below are not.}
 }}
 
@@ -58,7 +56,7 @@ archaeological record due to burial practices or taphonomic factors.
 The deposition decision is deterministic: all dead agents at or above
 the cutoff age are deposited; all below are not.
 
-Note: This module handles deposition only. Living agents are not
+Note: This module handles deposition only and is applied to the decedents data frame. Living agents are not
 processed. Preservation filtering (whether deposited remains are
 recoverable) is handled by a separate module.
 }

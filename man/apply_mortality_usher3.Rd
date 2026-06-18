@@ -72,26 +72,6 @@ filtration (archaeological sampling bias) are handled by separate modules.
 }
 \examples{
 # Create a small test population
-state <- data.frame(
-  agent_id = 1:10,
-  age = c(0, 5, 10, 20, 30, 40, 50, 60, 70, 80),
-  lesion = c(FALSE, FALSE, TRUE, FALSE, TRUE, FALSE, FALSE, TRUE, FALSE, TRUE),
-  dead = rep(FALSE, 10),
-  in_sample = rep(TRUE, 10)
-)
-
-# Siler parameters (Gage & Dyke 1986, Table 2, Level 15)
-a_siler <- c(0.175, 1.40, 0.00368, 0.000075, 0.0917)
-b_siler <- demohaz::trad_to_demohaz_siler_param(a_siler)
-mortality_param <- c(1.2, b_siler)  # k2 = 1.2
-
-# Apply one year of mortality
-result <- apply_mortality_usher3(
-  state = state,
-  mortality_model = "usher3",
-  mortality_param = mortality_param,
-  dx = 1
-)
 
 }
 \seealso{

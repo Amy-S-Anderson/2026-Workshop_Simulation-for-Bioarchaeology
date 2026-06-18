@@ -5,39 +5,66 @@
 \title{Simulate a cemetery using the Persephone ABM}
 \usage{
 Simulate_Cemetery(
-  cohort_size,
-  lesion_formation_rate,
-  formation_window_opens = 0,
-  formation_window_closes,
-  mortality_risk_type = "proportional",
-  relative_mortality_risk = 1,
+  dx = 1,
+  max_years = 100,
+  pop0_size,
+  age_structured = TRUE,
+  pop_growth_rate = 0,
+  tfr,
   mortality_regime,
+  lesion_formation_rate = NULL,
+  annual_exposure = NULL,
+  lesion_formation_window = c(0, 0),
+  mortality_risk_type = "proportional",
+  lesion_related_hazard = 1,
+  gammafrailty_shape = NULL,
+  gammafrailty_scale = NULL,
+  exposure_causes_hazard = FALSE,
+  hazard_is_transient = FALSE,
+  lesion_requires_survival = FALSE,
+  exposure_hazard_multiplier = 1,
   deposition_param = 0,
-  loss_strength = "none",
+  taphonomy_regime = NULL,
+  loss_strength = "no_decay",
   age_noise = FALSE
 )
 }
 \arguments{
-\item{cohort_size}{Integer. Number of individuals in the starting cohort.}
+\item{dx}{Numeric. Size of thecurrent_timestep in which all other model actions are applied.}
+
+\item{pop0_size}{Integer. Number of individuals in the starting pop.}
+
+\item{age_structured}{Logical. Is the starting population age-structured, or an age cohort?}
+
+\item{pop_growth_rate}{Numeric. The population growth rate}
+
+\item{tfr}{Numeric. Total fertility rate.}
+
+\item{mortality_regime}{Data frame with Siler parameters (a1, b1, a2, a3, b3).}
 
 \item{lesion_formation_rate}{Numeric. Annual probability of developing a
 lesion (between 0 and 1).}
 
-\item{formation_window_opens}{Numeric. Age at which lesions can start
-forming. Default 0.}
-
-\item{formation_window_closes}{Numeric. Age at which new lesions stop forming.}
+\item{lesion_formation_window}{numeric vector of length = 2. c(Age at which lesions can start forming, Age at which lesions stop forming)}
 
 \item{mortality_risk_type}{Character. How lesions modify mortality:
 "proportional", "time_decreasing", or "time_increasing".}
 
-\item{relative_mortality_risk}{Numeric. Mortality multiplier for individuals
+\item{lesion_related_hazard}{Numeric. Mortality multiplier for individuals
 with lesions. 1 = no effect, 2 = double risk. Default 1.}
 
-\item{mortality_regime}{Data frame with Siler parameters (a1, b1, a2, a3, b3).}
+\item{deposition_param}{Numeric. the minimum age for including agents in the cemetery}
+
+\item{taphonomy_regime}{Not sure***}
+
+\item{loss_strength}{Character. describes age-dependent preservation bias (defaults to 'no_decay')}
+
+\item{age_noise}{Logical. If TRUE, then age estimation error is added to estimated age-at-death.}
+
+\item{max_years.}{Integer. Number of years to run the simulation, given that the population doesn't crash before then.}
 }
 \value{
-A list with two elements:
+A list with two elements
 \describe{
 \item{individual_outcomes}{Data frame of all individuals with age at
 death and lesion status.}
@@ -46,16 +73,16 @@ at each age.}
 }
 }
 \description{
-Runs the Persephone agent-based model: a birth cohort ages through time,
+Runs the Persephone agent-based model: a birth pop ages throughcurrent_time,
 facing annual risks of skeletal lesion formation and Siler-model mortality.
 Individuals with lesions may experience modified mortality risk. The
 simulation ends when fewer than 10 individuals remain alive.
 }
 \examples{
 result <- Simulate_Cemetery(
-  cohort_size = 500,
+  pop0_size = 500,
   lesion_formation_rate = 0.10,
-  formation_window_closes = 5,
+  lesion_formation_window = c(0,5),
   mortality_regime = CoaleDemenyWestF5
 )
 

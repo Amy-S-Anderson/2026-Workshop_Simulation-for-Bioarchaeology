@@ -4,10 +4,10 @@
 \alias{compute_siler_risk}
 \title{Compute Siler hazard for a given age}
 \usage{
-compute_siler_risk(k, mortality_regime)
+compute_siler_risk(ages, mortality_regime)
 }
 \arguments{
-\item{k}{Age (integer timestep)}
+\item{ages}{Integer vector, if population is age-structured}
 
 \item{mortality_regime}{Data frame with Siler parameters (a1, b1, a2, a3, b3)}
 }

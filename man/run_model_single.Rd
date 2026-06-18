@@ -2,20 +2,23 @@
 % Please edit documentation in R/sweep.R
 \name{run_model_single}
 \alias{run_model_single}
-\title{Run the model once and save results to disk}
+\title{Run Simulate_Cemetery once and save all outputs to disk}
 \usage{
 run_model_single(params, output_directory, seed = NA)
 }
 \arguments{
-\item{params}{Named list of simulation parameters}
+\item{params}{Named list of parameters passed directly to Simulate_Cemetery}
 
-\item{output_directory}{Directory path for saving output files}
+\item{output_directory}{Full path to the directory for this single run}
 
-\item{seed}{Optional random seed for reproducibility}
+\item{seed}{Optional integer seed. If NA a microsecond-based seed is chosen.}
 }
 \value{
-The simulation output (list with individual_outcomes and survivors)
+The simulation output list (individual_outcomes, annual_census),
+invisibly
 }
 \description{
-Run the model once and save results to disk
+Creates a uniquely named subdirectory, saves the random seed, the full
+parameter list as JSON, individual_outcomes as sim_cemetery.csv, and
+annual_census as sim_census.csv.
 }
