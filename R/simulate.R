@@ -57,139 +57,6 @@ compute_siler_risk <- function(ages, mortality_regime) {
 
 
 
-# ------------------------------------------------------------------------------
-# Fertility module for Persephone ABM
-# ------------------------------------------------------------------------------
-
-
-#' Compute a trapezoid age-specific fertility schedule from a TFR
-#'
-#' The schedule rises linearly from 0 at age_start to a peak at age_peak_start,
-#' remains flat to age_peak_end, then falls linearly back to 0 at age_end.
-#' The peak rate is derived analytically so that the sum of ASFRs across all
-#' ages equals the TFR (i.e. the schedule integrates correctly by construction).
-#'
-#' @param ages Integer vector of ages to compute the schedule over
-#' @param tfr Numeric. Total Fertility Rate (expected lifetime births per woman)
-#' @param age_start Numeric. Age at which fertility begins. Default 15.
-#' @param age_peak_start Numeric. Age at which fertility reaches its peak. Default 25.
-#' @param age_peak_end Numeric. Age at which fertility begins to decline. Default 35.
-#' @param age_end Numeric. Age at which fertility reaches zero. Default 45.
-#' @return Named numeric vector of annual age-specific fertility rates
-#' @keywords internal
-compute_trapezoid_asfr <- function(ages, tfr,
-                                   age_start = 15, age_peak_start = 25,
-                                   age_peak_end = 35, age_end = 45) {
-  flat_width      <- age_peak_end   - age_peak_start
-  ramp_up_width   <- age_peak_start - age_start
-  ramp_down_width <- age_end        - age_peak_end
-  area_per_peak   <- flat_width + ramp_up_width / 2 + ramp_down_width / 2
-  peak_asfr       <- tfr / area_per_peak
-  
-  asfr <- dplyr::case_when(
-    ages <  age_start      ~ 0,
-    ages <  age_peak_start ~ peak_asfr * (ages - age_start)  / ramp_up_width,
-    ages <= age_peak_end   ~ peak_asfr,
-    ages <  age_end        ~ peak_asfr * (age_end - ages)    / ramp_down_width,
-    TRUE               ~ 0
-  )
-  
-  setNames(asfr, ages)
-}
-
-
-#' Generate new agent rows to append to the pop
-#'
-#' Creates n_births new agents with age 0 and no lesion, with agent_ids
-#' continuing sequentially from the current maximum in the population. All other
-#' columns are initialized to match the structure of create_pop().
-#'
-#' @param pop Population data frame (used to determine next agent_id)
-#' @param n_births Integer. Number of new agents to create.
-#' @param pop_config A list of parameters for the initial population so that new agents will have matching trait columns. 
-#' @return Data frame with n_births rows ready to rbind() onto the population
-#' @keywords internal
-
-generate_births <- function(pop, n_births, pop_config) {
-  if (n_births == 0L) return(pop[0, ])
-  
-  max_id <- max(pop$agent_id)
-  
-  new_agents <- data.frame(
-    agent_id = seq(max_id + 1, max_id + n_births),
-    age      = 0
-  )
-  
-  if (pop_config$model_lesions) {
-    new_agents$lesion <- 0
-  }
-  if (pop_config$model_frailty) {
-    new_agents$frailty          <- rgamma(n_births,
-                                          shape = pop_config$gammafrailty_shape,
-                                          scale = pop_config$gammafrailty_scale)
-    new_agents$acquired_frailty <- NA_real_
-  }
-  
-  if ("n_stress_events" %in% names(pop)) {
-    new_agents$n_stress_events <- 0L
-  }
-  
-  new_agents[, names(pop), drop = FALSE]
-}
-
-#' Apply fertility to the living population for one timestep
-#'
-#' Determines how many births occur this timestep and appends new agents to
-#' the pop. The number of births is drawn from a Poisson distribution whose
-#' rate equals the sum of age-specific fertility rates across all reproductive-
-#' age women in the living population.
-#'
-#' Women are approximated as half of all living agents aged between age_start
-#' and age_end (inclusive). This assumption can be replaced once sex is added
-#' as a column to the pop data frame, by filtering on pop$sex == "F"
-#' instead.
-#'
-#' Birth counts are drawn as Poisson rather than Bernoulli because multiple
-#' births can occur at a given age in a population of any size, and the Poisson
-#' approximation to the sum of many independent Bernoulli trials is exact in
-#' the limit of large population and small per-individual rate.
-#'
-#' @param pop Population data frame
-#' @param tfr Numeric. Total Fertility Rate.
-#' @param asfr Named numeric vector of age-specific fertility rates, as
-#'   returned by compute_trapezoid_asfr(). The names must be character
-#'   representations of integer ages.
-#' @param dx Numeric. timestep size. Scales fertility rates proportionally.
-#'   Default 1 (annual timestep).
-#' @param pop_config A list of population trait parameter values to be called so that newborns have the same columns as the existing population. 
-#' @return Updated pop data frame with new agents appended
-#' @keywords internal
-#' I want apply_fertility to reference create_pop and generate sensible birth values for the same columns that are specified in the create_pop call. 
-apply_fertility <- function(pop, tfr, asfr, dx = 1, pop_config) {
-  
-  repro_ages      <- as.numeric(names(asfr))
-  in_repro_window <- pop$age %in% repro_ages
-  repro_ages_actual <- pop$age[in_repro_window]
-  
-  n_repro         <- sum(in_repro_window)
-  n_female_approx <- round(n_repro / 2)
-  
-  if (n_female_approx == 0L) return(pop)
-  
-  female_age_sample <- sample(repro_ages_actual,
-                              size    = n_female_approx,
-                              replace = FALSE)
-  
-  asfr_values     <- asfr[as.character(female_age_sample)]
-  expected_births <- sum(asfr_values * dx) # <- You should change apply_mortality to follow this logic too. Right now it only works if dx = 1. 
-  n_births        <- rpois(1, lambda = expected_births)
-  
-  new_agents <- generate_births(pop, n_births, pop_config)
-  rbind(pop, new_agents)
-}
-  
-
-
 
 #' Sample which agents are exposed to lesion-causing conditions this timestep
 #'
@@ -485,12 +352,13 @@ Simulate_Cemetery <- function(# Time arguments
   
   # Logical: Does this simulation include skeletal lesion formation?
   model_lesions <- !is.null(lesion_formation_rate) | !is.null(annual_exposure)
+  model_frailty <- !is.null(gammafrailty_shape)
   
   # Hold population configuration parameters here for ease of reference in functions that follow. 
   pop_config <- list(
     model_lesions              = model_lesions,
     annual_exposure            = annual_exposure,
-    model_frailty              = !is.null(gammafrailty_shape),
+    model_frailty              = model_frailty,
     gammafrailty_shape         = gammafrailty_shape,
     gammafrailty_scale         = gammafrailty_scale,
     lesion_formation_window    = lesion_formation_window,
@@ -587,7 +455,7 @@ Simulate_Cemetery <- function(# Time arguments
     }
     
     if (age_structured == TRUE) {
-      pop <- apply_fertility(pop, tfr = tfr, asfr = asfr, dx = dx, pop_config)
+      pop <- apply_fertility(pop, tfr = tfr, asfr = asfr, current_time = current_time, dx = dx, pop_config)
     }
     
     current_time <- current_time + 1

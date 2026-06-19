@@ -59,8 +59,8 @@ compute_trapezoid_asfr <- function(ages,
 #'
 #' @param pop Population data frame (used to determine next agent_id)
 #' @param current_time Numeric. Time counter for ABM main loop. 
-#' @param n_births Integer. Number of new agents to create.
-#' @param pop_config A list of parameters for the initial population so that new agents will have matching trait columns. 
+#' @param n_births Integer. Number of new agents to create. generate_births() is called inside apply_fertility(), and n_births is calculated inside apply_fertility() before this call, using the birth probabilities calculated from compute_asfr_trapezoid(), should be supplied to apply_fertility() in the asfr argument. 
+#' @param pop_config A list of parameters for the initial population so that new agents will have matching trait columns. Defaults to the pop_config object that should be automatically defined earlier in Simulate_Cemetery, before the main ABM loop. 
 #' @return Data frame with n_births rows ready to rbind() onto the population
 #' @keywords internal
 #' @export
@@ -95,6 +95,7 @@ generate_births <- function(pop, current_time, n_births, pop_config) {
 
 
 
+
 #' Apply fertility to the living population for one timestep
 #'
 #' Determines how many births occur this timestep and appends new agents to
@@ -112,54 +113,38 @@ generate_births <- function(pop, current_time, n_births, pop_config) {
 #' approximation to the sum of many independent Bernoulli trials is exact in
 #' the limit of large population and small per-individual rate.
 #'
-#' @param cohort Population data frame
-#' @param Alive Integer vector of row indices for living agents
+#' @param pop Population data frame
 #' @param tfr Numeric. Total Fertility Rate.
 #' @param asfr Named numeric vector of age-specific fertility rates, as
 #'   returned by compute_trapezoid_asfr(). The names must be character
 #'   representations of integer ages.
-#' @param dx Numeric. Timestep size. Scales fertility rates proportionally.
+#' @param dx Numeric. timestep size. Scales fertility rates proportionally.
 #'   Default 1 (annual timestep).
-#' @return Updated cohort data frame with new agents appended
+#'@param current_time Numeric. Defaults to the value of the current_time counter defined in the Simulate_Cemetery main loop in which apply_fertility is called. 
+#' @param pop_config A list of population trait parameter values to be called so that newborns have the same columns as the existing population. 
+#' @return Updated pop data frame with new agents appended
 #' @keywords internal
 #' @export
-apply_fertility <- function(cohort, Alive, tfr, asfr, dx = 1) {
+apply_fertility <- function(pop, tfr, asfr, dx = 1, 
+                            current_time = current_time, pop_config = pop_config) {
   
-  # Ages of all living agents
-  ages_alive <- cohort$age[Alive]
+  repro_ages      <- as.numeric(names(which(asfr > 0)))
+  in_repro_window <- pop$age %in% repro_ages
+  repro_ages_actual <- pop$age[in_repro_window]
   
-  # Identify reproductive-age agents and approximate females as half of them
-  repro_ages    <- as.numeric(names(asfr))
-  in_repro_window <- ages_alive %in% repro_ages
-  
-  repro_agents  <- Alive[in_repro_window]
-  repro_ages_actual <- cohort$age[repro_agents]
-  
-  # Approximate females as half the reproductive-age living population.
-  # When sex becomes a cohort column, replace this block with:
-  #   female_agents <- repro_agents[cohort$sex[repro_agents] == "F"]
-  #   female_ages   <- cohort$age[female_agents]
-  n_repro       <- length(repro_agents)
+  n_repro         <- sum(in_repro_window)
   n_female_approx <- round(n_repro / 2)
   
-  if (n_female_approx == 0L) return(cohort)  # no reproductive-age women
+  if (n_female_approx == 0L) return(pop)
   
-  # Expected births = sum of ASFR at each female's age, scaled by dx.
-  # We sample ages for our approximate females proportional to their
-  # representation in the reproductive-age pool, then look up their ASFR.
   female_age_sample <- sample(repro_ages_actual,
                               size    = n_female_approx,
                               replace = FALSE)
   
-  asfr_values    <- asfr[as.character(female_age_sample)]
-  expected_births <- sum(asfr_values * dx)
+  asfr_values     <- asfr[as.character(female_age_sample)]
+  expected_births <- sum(asfr_values * dx) # <- You should change apply_mortality to follow this logic too. Right now it only works if dx = 1. 
+  n_births        <- rpois(1, lambda = expected_births)
   
-  # Draw realized births from a Poisson distribution
-  n_births <- rpois(1, lambda = expected_births)
-  
-  # Append new agents to the cohort and return
-  new_agents <- generate_births(cohort, n_births)
-  cohort <- rbind(cohort, new_agents)
-  
-  cohort
+  new_agents <- generate_births(pop, n_births, current_time, pop_config)
+  rbind(pop, new_agents)
 }
