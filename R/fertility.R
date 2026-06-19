@@ -145,7 +145,9 @@ apply_fertility <- function(pop, tfr, asfr, dx = 1,
   expected_births <- sum(asfr_values * dx) # <- You should change apply_mortality to follow this logic too. Right now it only works if dx = 1. 
   n_births        <- rpois(1, lambda = expected_births)
   
-  new_agents <- generate_births(pop, n_births, 
-                                current_time = time, pop_config = config)
+  new_agents <- generate_births(pop = pop, 
+                                current_time = time,   # correct name
+                                n_births     = n_births, 
+                                pop_config   = config)
   rbind(pop, new_agents)
 }

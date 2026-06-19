@@ -1,25 +1,23 @@
 ---
 title: "Fertility demo"
 author: "Amy Anderson"
-date: "2026-06-12"
-output: html_document
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Known Unknowns: Replicating the Main Analysis}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 ---
 
-# Friday To-Do:
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, 
+                      
+  dpi     = 300,      # crisp resolution
+  fig.width  = 10,    # wide enough for two side-by-side plots
+  fig.height = 5,     # adjust to taste
+  out.width  = "100%" # fills the vignette column width
+)
 
-# 4. Write a script for fertility functions demo
-# - remember to go back and change the placement of the column creation for was_deposited and in_sample
-# - fix the 'annual_census' output. 
-# - generate a dynamic population
-# - plot the population size through time.
-
-# 5. Can you make the package updated and downloadable? 
-# ...and publish the Shiny app?
-
-
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ### Persephone has joined forces with Demeter!
@@ -37,8 +35,9 @@ library(patchwork)
  
  
  
-### Fertility update 1: Generating Age-structured starting populations
-```{r}
+### Step 1: Generating Age-structured starting populations  
+None of the fertility functions will run in a simulation with an age cohort, in which all agents are the same age. The starting population must be age-structured in order for fertility rate to be specified.  
+```{r, fig.cap="Age structure of initial agents is determined by mortality regime and population growth rate, \n which defaults to r = 0 (a stationary population)"}
 
 # Hold population configuration parameters here for ease of reference in functions that follow. 
   pop_config <- list(
@@ -63,7 +62,7 @@ cohort <- create_pop(pop0_size = 100,
                       mortality_regime = CoaleDemenyWest5)
 
 # Generate age-structured, stationary populations of 10,000 people.
-pop_cdw3 <- create_pop(pop0_size = 100, 
+pop_cdw3 <- create_pop(pop0_size = 10000, 
                       age_structured = TRUE,
                       pop_config = pop_config,
                       r = 0, # population growth rate
@@ -77,25 +76,26 @@ pop_cdw21 <- create_pop(pop0_size = 10000,
                       r = 0, # population growth rate
                       mortality_regime = CoaleDemenyWestF21) 
 
-
 # plot the age distributions created in the two stationary populations:
 p1 <- ggplot(pop_cdw3, aes(x = age)) +
   geom_bar(color = "blue") +
   labs(title = "CDW F Level 3", subtitle ="stationary population, n = 10,000") +
-  scale_y_continuous(limits = c(0,700)) +
+ # scale_y_continuous(limits = c(0,700)) +
   theme_bw()
 p2 <- ggplot(pop_cdw21, aes(x = age)) +
   geom_bar() + 
     labs(title = "CDW F Level 21", subtitle = "stationary population, n = 10,000") +
-    scale_y_continuous(limits = c(0,700)) +
+   # scale_y_continuous(limits = c(0,700)) +
   theme_bw()
 
 p1 + p2
 ```
                       
-
+                      
+\n
+\n
 Now make them stable, but not stationary:
-```{r}
+```{r, fig.cap="Holding mortality constant and not modeling migration, population growth/decline is assumed to be entirely a function of fertility in these three plots. The huge impact of fertility rates on the age structure of a mortality sample is apparent here."}
 pop_cdw3_growing <- create_pop(pop0_size = 10000, 
                       age_structured = TRUE,
                       pop_config = list(model_lesions = FALSE, 
@@ -112,169 +112,46 @@ pop_cdw3_declining <- create_pop(pop0_size = 10000,
 
 p1 <- p1 + 
     scale_y_continuous(limits = c(0,1500)) +
-  labs(subtitle = "stationary population")
+  labs(title = "stationary population", subtitle = "Mortality: CDW F Level 3")
 
 p3 <- ggplot(pop_cdw3_growing, aes(x = age)) +
   geom_bar(color = "blue") +
-  labs(title = "CDW F Level 3", subtitle ="3% population growth") +
+  labs(subtitle = "Mortality: CDW F Level 3", title ="3% population growth") +
   scale_y_continuous(limits = c(0,1500)) +
   theme_bw()
 
 p4 <- ggplot(pop_cdw3_declining, aes(x = age)) +
   geom_bar(color = "blue") +
-  labs(title = "CDW F Level 3", subtitle ="3% population decline") +
+  labs(subtitle = "Mortality: CDW F Level 3", title ="3% population decline") +
   scale_y_continuous(limits = c(0,1500)) +
   theme_bw()
 
 p4 + p1 + p3
 ```
+\n
+\n
 
-### Fertility update 2: new-born agents every year 
+### Step 2: new-born agents every year 
 the call for `Simulate_Cemetery` now includes an argument called `tfr`: average Total Fertility Rate for the population. 
 It gets called in the time step loop of the Simulate_Cemetery ABM by the function 'apply_fertility'. 
 
-Here's a look at apply_fertility and the functions it relies on: 
-```{r Fertility functions}
-
-#' Compute a trapezoid age-specific fertility schedule from a TFR
-#'
-#' The schedule rises linearly from 0 at age_start to a peak at age_peak_start,
-#' remains flat to age_peak_end, then falls linearly back to 0 at age_end.
-#' The peak rate is derived analytically so that the sum of ASFRs across all
-#' ages equals the TFR (i.e. the schedule integrates correctly by construction).
-#'
-#' @param ages Integer vector of ages to compute the schedule over
-#' @param tfr Numeric. Total Fertility Rate (expected lifetime births per woman)
-#' @param age_start Numeric. Age at which fertility begins. Default 15.
-#' @param age_peak_start Numeric. Age at which fertility reaches its peak. Default 25.
-#' @param age_peak_end Numeric. Age at which fertility begins to decline. Default 35.
-#' @param age_end Numeric. Age at which fertility reaches zero. Default 45.
-#' @return Named numeric vector of annual age-specific fertility rates
-#' @keywords internal
-#' 
-#' 
-#.  Test how changing age start, peak, end changes other variables in the model. 
-compute_trapezoid_asfr <- function(ages, tfr,
-                                   age_start = 15, age_peak_start = 25,
-                                   age_peak_end = 35, age_end = 45) {
-  flat_width      <- age_peak_end   - age_peak_start
-  ramp_up_width   <- age_peak_start - age_start
-  ramp_down_width <- age_end        - age_peak_end
-  area_per_peak   <- flat_width + ramp_up_width / 2 + ramp_down_width / 2
-  peak_asfr       <- tfr / area_per_peak
-  
-  asfr <- dplyr::case_when(
-    ages <  age_start      ~ 0,
-    ages <  age_peak_start ~ peak_asfr * (ages - age_start)  / ramp_up_width,
-    ages <= age_peak_end   ~ peak_asfr,
-    ages <  age_end        ~ peak_asfr * (age_end - ages)    / ramp_down_width,
-    TRUE               ~ 0
-  )
-  
-  setNames(asfr, ages)
-}
-
+```{r, fig.cap="Age-specific probability of giving birth. In combination with TFR and the existing age structure of the population, this determines the expected number of births each year."}
 # example of the asfr trapezoid
 birth_probs <- compute_trapezoid_asfr(ages = unique(pop_cdw3$age), tfr = 4)
-tmp <- data.frame(ages = unique(pop_cdw3$age), birth_probs)
-plot(tmp$ages, tmp$birth_probs)
-```
-```{r Fertility functions cont.}
-#' Generate new agent rows to append to the pop
-#'
-#' Creates n_births new agents with age 0 and no lesion, with agent_ids
-#' continuing sequentially from the current maximum in the population. All other
-#' columns are initialized to match the structure of create_pop().
-#'
-#' @param pop Population data frame (used to determine next agent_id)
-#' @param n_births Integer. Number of new agents to create.
-#' @param pop_config A list of parameters for the initial population so that new agents will have matching trait columns. 
-#' @return Data frame with n_births rows ready to rbind() onto the population
-#' @keywords internal
-
-generate_births <- function(pop, n_births, pop_config) {
-  if (n_births == 0L) return(pop[0, ])
-  
-  max_id <- max(pop$agent_id)
-  
-  new_agents <- data.frame(
-    agent_id = seq(max_id + 1, max_id + n_births),
-    age      = 0
-  )
-  
-  if (pop_config$model_lesions) {
-    new_agents$lesion <- 0
-  }
-  if (pop_config$model_frailty) {
-    new_agents$frailty          <- rgamma(n_births,
-                                          shape = pop_config$gammafrailty_shape,
-                                          scale = pop_config$gammafrailty_scale)
-    new_agents$acquired_frailty <- NA_real_
-  }
-  
-  if ("n_stress_events" %in% names(pop)) {
-    new_agents$n_stress_events <- 0L
-  }
-  
-  new_agents[, names(pop), drop = FALSE]
-}
-
-
-#' Apply fertility to the living population for one timestep
-#'
-#' Determines how many births occur this timestep and appends new agents to
-#' the pop. The number of births is drawn from a Poisson distribution whose
-#' rate equals the sum of age-specific fertility rates across all reproductive-
-#' age women in the living population.
-#'
-#' Women are approximated as half of all living agents aged between age_start
-#' and age_end (inclusive). This assumption can be replaced once sex is added
-#' as a column to the pop data frame, by filtering on pop$sex == "F"
-#' instead.
-#'
-#' Birth counts are drawn as Poisson rather than Bernoulli because multiple
-#' births can occur at a given age in a population of any size, and the Poisson
-#' approximation to the sum of many independent Bernoulli trials is exact in
-#' the limit of large population and small per-individual rate.
-#'
-#' @param pop Population data frame
-#' @param tfr Numeric. Total Fertility Rate.
-#' @param asfr Named numeric vector of age-specific fertility rates, as
-#'   returned by compute_trapezoid_asfr(). The names must be character
-#'   representations of integer ages.
-#' @param dx Numeric. timestep size. Scales fertility rates proportionally.
-#'   Default 1 (annual timestep).
-#' @param pop_config A list of population trait parameter values to be called so that newborns have the same columns as the existing population. 
-#' @return Updated pop data frame with new agents appended
-#' @keywords internal
-#' I want apply_fertility to reference create_pop and generate sensible birth values for the same columns that are specified in the create_pop call. 
-apply_fertility <- function(pop, tfr, asfr, dx = 1, pop_config) {
-  
-  repro_ages      <- as.numeric(names(asfr))
-  in_repro_window <- pop$age %in% repro_ages
-  repro_ages_actual <- pop$age[in_repro_window]
-  
-  n_repro         <- sum(in_repro_window)
-  n_female_approx <- round(n_repro / 2)
-  
-  if (n_female_approx == 0L) return(pop)
-  
-  female_age_sample <- sample(repro_ages_actual,
-                              size    = n_female_approx,
-                              replace = FALSE)
-  
-  asfr_values     <- asfr[as.character(female_age_sample)]
-  expected_births <- sum(asfr_values * dx) # <- You should change apply_mortality to follow this logic too. Right now it only works if dx = 1. 
-  n_births        <- rpois(1, lambda = expected_births)
-  
-  new_agents <- generate_births(pop, n_births, pop_config)
-  rbind(pop, new_agents)
-}
+asfr_range <- data.frame(ages = unique(pop_cdw3$age), birth_probs)
+ggplot(asfr_range, aes(x = ages, y = birth_probs)) +
+  geom_line(linetype = "dashed") +
+  labs(x = "Age", y = "Probability of giving birth") +
+  theme_bw()
 ```
 
+
+\n
+\n
 
 So let's take our stationary CDW3 population and apply one year of fertility probability to them: 
-```{r}
+```{r, fig.cap="After applying the fertility function once, the number of infants is higher. No other ages should be affected by this transformation."}
+
 # Let's say each woman has, on average, 4 children. 
 tfr <- 4
 
@@ -284,63 +161,98 @@ asfr <- compute_trapezoid_asfr(ages = 0:100, tfr = tfr)
 
 updated_pop <- apply_fertility(pop_cdw3, # the current population
                                tfr = tfr,
-                               asfr, # the age-structured fertility rate
-                               pop_config = pop_config)
+                               dx = 1,
+                               time = 1, # the current year. Could be any integer. 
+                               asfr = asfr, # the age-structured fertility rate
+                               config = pop_config)
 
-View(updated_pop)   
+updated_pop$fertility_applied <- "After new births"    
+pop_cdw3$fertility_applied <- "Before new births"
+before_and_after <- rbind(updated_pop, pop_cdw3)
 
-p5 <- ggplot(updated_pop, aes(x = age)) +
-  geom_bar(color = "blue") +
-  labs(title = "CDW F Level 3", subtitle ="TFR = 4, one year") +
-  scale_y_continuous(limits = c(0,1500)) +
+ggplot(before_and_after, aes(x = age)) +
+  geom_bar(aes(fill = fertility_applied), position = "dodge") +
+  labs(x = "Age", y = "n", fill = " ") +
   theme_bw()
-
-p1 + p5
 ```
-
+\n
+\n
+\n
 ... Now let's run a stable population through time.
-```{r}
+```{r, fig.cap="Variation in population growth across 300 years when mortality is held constant and TFR ranges from 0 to 6.", echo=FALSE}
 params <- get_default_params()
-params$max_years = 500
+params$pop0_size = 100
+params$max_years = 300
 params$age_structured = TRUE
 params$mortality_regime = CoaleDemenyWestF11
-params$tfr = 3.1
 
-test_tfr <- c(1, 2, 2.8, 3.5, 5, 7)
+
+test_tfr <- c(0, 1, 2.5, 3.5, 5, 6)
 test_pops <- vector("list", length(test_tfr))
+pop_size <- vector("list", length(test_tfr))
 plots <- vector("list", length(test_tfr))
 for(i in 1:length(test_tfr)){
-  params$tfr = tfr[i]
+  params$tfr = test_tfr[i]
   test_pops[[i]] <- do.call(Simulate_Cemetery, params)
-  plots[[i]] <- ggplot(test_pops[[i]]$annual_census, aes(x = Time, y = n)) +
-  geom_line() +
-  theme_bw()
+  pop_size[[i]] <- test_pops[[i]]$annual_census
+  pop_size[[i]]$tfr <- test_tfr[i]
+   plots[[i]] <- ggplot(test_pops[[i]]$annual_census, aes(x = Time, y = n)) +
+   geom_line() +
+     ggtitle(paste0("TFR = ", test_tfr[i])) +
+   theme_bw()
 }
 
-# Compare annual population size over a 500-year simulation run when TFR ranges between 1 and 7 and mortality stays stable. 
-plots[[1]] + plots[[2]] + plots[[3]] + plots[[4]] # + plots[[5]] # + plots[[6]] + plot_layout(ncol = 3)
+# collect all population censuses into a single data frame, with TFR values
+# tfr_sweep_n <- do.call(rbind, pop_size)
+# # plot population size across time, with color mapped to TFR
+# ggplot(tfr_sweep_n, aes(x = Time, y = n)) +
+#   geom_line(aes(group = tfr, color = as.factor(tfr))) +
+#   labs(x = "Year", y = "Population size", color = "TFR") +
+#   theme_bw()
+# Plotting in a single panel only works for small populations on short time frames, when the range of TFRs isn't too wide. 
 
+
+# Compare annual population size over a 300-year simulation run when TFR ranges between 0 and 6 and mortality stays stable. 
+plots[[1]] + plots[[2]] + plots[[3]] + plots[[4]]  + plots[[5]]  + plots[[6]] + plot_layout(ncol = 3)
+```
+
+\n
+\n
+
+...and now, something approximating an agrarian population.  
+```{r Imaginary Agrarians, fig.cap="Imaginary Agrarians. small starting population (n = 100), high mortality (CDW3), high fertility (TFR = 12).", warning=FALSE}
 
 params$mortality_regime <- CoaleDemenyWestF3
 params$tfr <- 12
-params$max_years <- 100
+params$max_years <- 200
 params$pop0_size <- 100
+
 agrarian <- do.call(Simulate_Cemetery, params)
+
 View(agrarian$individual_outcomes)
 
-ggplot(agrarian$annual_census, aes(x = Time, y = n)) +
+n_alive <- ggplot(agrarian$annual_census, aes(x = Time, y = n)) +
   geom_line() +
+  labs(x = "Year", y = "Population Size") +
   theme_bw()
 
-agrarian$individual_outcomes %>%
+n_born <- agrarian$individual_outcomes %>%
+  group_by(year_born) %>%
+  summarise(n_born = n()) %>%
+  ggplot(aes(x = year_born, y = n_born)) +
+  geom_line() +
+  labs(x = "Year born", y = "Number of Births") +
+  theme_bw()
+
+n_died <- agrarian$individual_outcomes %>%
   group_by(year_died) %>%
   summarise(n_died = n()) %>%
   ggplot(aes(x = year_died, y = n_died)) +
-  geom_line()
+  geom_line() +
+  labs(x = "Year died", y = "Number of Deaths") +
+  theme_bw()
 
+n_alive / (n_born + n_died)
 
-tail(agrarian$individual_outcomes %>%
-  group_by(year_died) %>%
-  summarise(n_died = n()))
 ```
 
