@@ -27,7 +27,8 @@ create_pop <- function(pop0_size, age_structured,
     pop0 <- create_pop_stable_age(pop0_size = pop0_size,
                                   mortality_regime = mortality_regime,
                                   r       = r, # pop. growth rate
-                                  max_age = 100)
+                                  max_age = 100,
+                                  year_born = NA_real_)
   }
   
   if(age_structured == FALSE){
