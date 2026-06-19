@@ -95,10 +95,8 @@ create_pop_stable_age <- function(pop0_size,
   
   pop0 <- data.frame(
     agent_id     = 1:pop0_size,
-    age          = as.numeric(starting_ages) #,
-    # dead         = FALSE,
-    # was_deposited = FALSE,
-    # in_sample    = TRUE
+    age          = as.numeric(starting_ages),
+    year_born = if_else(age == 0, 0, NA_real_)
   )
   if(!is.null(lesion_formation_rate )){
     pop0 <- pop0 %>%
