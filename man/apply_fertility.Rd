@@ -4,14 +4,7 @@
 \alias{apply_fertility}
 \title{Apply fertility to the living population for one timestep}
 \usage{
-apply_fertility(
-  pop,
-  tfr,
-  asfr,
-  dx = 1,
-  current_time = current_time,
-  pop_config = pop_config
-)
+apply_fertility(pop, tfr, asfr, dx = 1, time, config = pop_config)
 }
 \arguments{
 \item{pop}{Population data frame}
@@ -25,7 +18,7 @@ representations of integer ages.}
 \item{dx}{Numeric. timestep size. Scales fertility rates proportionally.
 Default 1 (annual timestep).}
 
-\item{current_time}{Numeric. Defaults to the value of the current_time counter defined in the Simulate_Cemetery main loop in which apply_fertility is called.}
+\item{time}{Numeric. Should be the value of the current_time counter defined in the Simulate_Cemetery main loop in which apply_fertility is called.}
 
 \item{pop_config}{A list of population trait parameter values to be called so that newborns have the same columns as the existing population.}
 }

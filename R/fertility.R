@@ -120,13 +120,13 @@ generate_births <- function(pop, current_time, n_births, pop_config) {
 #'   representations of integer ages.
 #' @param dx Numeric. timestep size. Scales fertility rates proportionally.
 #'   Default 1 (annual timestep).
-#'@param current_time Numeric. Defaults to the value of the current_time counter defined in the Simulate_Cemetery main loop in which apply_fertility is called. 
+#'@param time Numeric. Should be the value of the current_time counter defined in the Simulate_Cemetery main loop in which apply_fertility is called. 
 #' @param pop_config A list of population trait parameter values to be called so that newborns have the same columns as the existing population. 
 #' @return Updated pop data frame with new agents appended
 #' @keywords internal
 #' @export
 apply_fertility <- function(pop, tfr, asfr, dx = 1, 
-                            current_time = current_time, pop_config = pop_config) {
+                            time, config = pop_config) {
   
   repro_ages      <- as.numeric(names(which(asfr > 0)))
   in_repro_window <- pop$age %in% repro_ages
@@ -145,6 +145,7 @@ apply_fertility <- function(pop, tfr, asfr, dx = 1,
   expected_births <- sum(asfr_values * dx) # <- You should change apply_mortality to follow this logic too. Right now it only works if dx = 1. 
   n_births        <- rpois(1, lambda = expected_births)
   
-  new_agents <- generate_births(pop, n_births, current_time, pop_config)
+  new_agents <- generate_births(pop, n_births, 
+                                current_time = time, pop_config = config)
   rbind(pop, new_agents)
 }
