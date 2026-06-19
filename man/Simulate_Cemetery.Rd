@@ -26,7 +26,8 @@ Simulate_Cemetery(
   deposition_param = 0,
   taphonomy_regime = NULL,
   loss_strength = "no_decay",
-  age_noise = FALSE
+  age_noise = FALSE,
+  yearly_updates = FALSE
 )
 }
 \arguments{
@@ -60,6 +61,8 @@ with lesions. 1 = no effect, 2 = double risk. Default 1.}
 \item{loss_strength}{Character. describes age-dependent preservation bias (defaults to 'no_decay')}
 
 \item{age_noise}{Logical. If TRUE, then age estimation error is added to estimated age-at-death.}
+
+\item{yearly_updates}{Logical. If TRUE, then the model prints current year and population size at the end of each time step during the model run. Useful for assessing simulation progress, especially when timeframe, TFR, or population size are large.}
 
 \item{max_years.}{Integer. Number of years to run the simulation, given that the population doesn't crash before then.}
 }
