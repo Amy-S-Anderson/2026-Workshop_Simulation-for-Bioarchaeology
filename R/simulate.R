@@ -294,6 +294,7 @@ record_cohort_survivors <- function(pop, current_time, model_lesions) {
 #' @param taphonomy_regime Not sure*** 
 #' @param loss_strength Character. describes age-dependent preservation bias (defaults to 'no_decay')
 #' @param age_noise Logical. If TRUE, then age estimation error is added to estimated age-at-death. 
+#' @param yearly_updates Logical. If TRUE, then the model prints current year and population size at the end of each time step during the model run. Useful for assessing simulation progress, especially when timeframe, TFR, or population size are large.
 #' @return A list with two elements
 #'   \describe{
 #'     \item{individual_outcomes}{Data frame of all individuals with age at
@@ -343,7 +344,10 @@ Simulate_Cemetery <- function(# Time arguments
                               deposition_param = 0,
                               taphonomy_regime = NULL,
                               loss_strength = 'no_decay',
-                              age_noise = FALSE) {
+                              age_noise = FALSE,
+                              
+                              # real-time update messages arguments
+                              yearly_updates = FALSE) {
   
   # check: return message if user chooses nonsensical combination of argument values.
   if (!is.null(lesion_formation_rate) && lesion_formation_window[2] == 0) {
@@ -466,8 +470,10 @@ Simulate_Cemetery <- function(# Time arguments
     } else {
       pop_size[[current_time]] <- data.frame(Time = current_time, n = nrow(pop))
     }
-    print(paste0("Year ", current_time))
-    print(paste0("Pop_size = ", nrow(pop)))
+    if(yearly_updates){
+      print(paste0("Year ", current_time))
+      print(paste0("Pop_size = ", nrow(pop)))
+    }
   }
   
   # If this is a single-generation model (no Total Fertility Rate specified for agents)
