@@ -2,7 +2,7 @@
 % Please edit documentation in R/fertility.R, R/simulate.R
 \name{generate_births}
 \alias{generate_births}
-\title{Generate new agent rows to append to the cohort}
+\title{Generate new agent rows to append to the pop}
 \usage{
 generate_births(pop, n_births, pop_config)
 
@@ -15,17 +15,17 @@ generate_births(pop, n_births, pop_config)
 
 \item{pop_config}{A list of parameters for the initial population so that new agents will have matching trait columns.}
 
-\item{cohort}{Population data frame (used to determine next agent_id)}
+\item{current_time}{Numeric. Time counter for ABM main loop.}
 }
 \value{
-Data frame with n_births rows ready to rbind() onto the cohort
+Data frame with n_births rows ready to rbind() onto the population
 
 Data frame with n_births rows ready to rbind() onto the population
 }
 \description{
 Creates n_births new agents with age 0 and no lesion, with agent_ids
-continuing sequentially from the current maximum in the cohort. All other
-columns are initialized to match the structure of create_cohort().
+continuing sequentially from the current maximum in the population. All other
+columns are initialized to match the structure of create_pop().
 
 Creates n_births new agents with age 0 and no lesion, with agent_ids
 continuing sequentially from the current maximum in the population. All other

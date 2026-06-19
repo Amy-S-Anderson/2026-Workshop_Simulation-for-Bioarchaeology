@@ -50,31 +50,49 @@ compute_trapezoid_asfr <- function(ages,
 }
 
 
-#' Generate new agent rows to append to the cohort
+
+#' Generate new agent rows to append to the pop
 #'
 #' Creates n_births new agents with age 0 and no lesion, with agent_ids
-#' continuing sequentially from the current maximum in the cohort. All other
-#' columns are initialized to match the structure of create_cohort().
+#' continuing sequentially from the current maximum in the population. All other
+#' columns are initialized to match the structure of create_pop().
 #'
-#' @param cohort Population data frame (used to determine next agent_id)
+#' @param pop Population data frame (used to determine next agent_id)
+#' @param current_time Numeric. Time counter for ABM main loop. 
 #' @param n_births Integer. Number of new agents to create.
-#' @return Data frame with n_births rows ready to rbind() onto the cohort
+#' @param pop_config A list of parameters for the initial population so that new agents will have matching trait columns. 
+#' @return Data frame with n_births rows ready to rbind() onto the population
 #' @keywords internal
 #' @export
-generate_births <- function(cohort, n_births) {
-  if (n_births == 0L) return(cohort[0L, ])  # empty frame with correct columns
+
+generate_births <- function(pop, current_time, n_births, pop_config) {
+  if (n_births == 0L) return(pop[0, ])
   
-  next_id <- max(cohort$agent_id) + 1L
+  max_id <- max(pop$agent_id)
   
-  data.frame(
-    agent_id     = seq(next_id, next_id + n_births - 1L),
-    age          = 0,
-    lesion       = 0L,
-    dead         = FALSE,
-    was_deposited = FALSE,
-    in_sample    = TRUE
+  new_agents <- data.frame(
+    agent_id = seq(max_id + 1, max_id + n_births),
+    age      = 0,
+    year_born = current_time
   )
+  
+  if (pop_config$model_lesions) {
+    new_agents$lesion <- 0
+  }
+  if (pop_config$model_frailty) {
+    new_agents$frailty          <- rgamma(n_births,
+                                          shape = pop_config$gammafrailty_shape,
+                                          scale = pop_config$gammafrailty_scale)
+    new_agents$acquired_frailty <- NA_real_
+  }
+  
+  if ("n_stress_events" %in% names(pop)) {
+    new_agents$n_stress_events <- 0L
+  }
+  
+  new_agents[, names(pop), drop = FALSE]
 }
+
 
 
 #' Apply fertility to the living population for one timestep
