@@ -1,4 +1,17 @@
-#' Get default simulation parameters
+
+
+#' Coale-Demeny West Female Level 5 mortality regime
+#'
+#' A mortality table used as the default regime in Persephone simulations.
+#'
+#' @name CoaleDemenyWestF5
+#' @docType data
+#' @keywords datasets
+NULL
+load('data/CoaleDemenyWestF5.rda')
+
+#' @title Get default simulation parameters
+#' @description Save this function, without any specified arguments, to an object, and that object will be a list of all the default parameter values for Simulate_Cemetery. 
 #' @return A named list of default parameter values
 #' @export
 get_default_params <- function() {
@@ -16,8 +29,8 @@ get_default_params <- function() {
     mortality_risk_type      = "proportional",
     lesion_related_hazard    = 1,
     
-    gammafrailty_shape = 1,
-    gammafrailty_scale = 1,
+    gammafrailty_shape = NULL,
+    gammafrailty_scale = NULL,
     
     exposure_causes_hazard     = FALSE,
     hazard_is_transient        = FALSE,
@@ -27,7 +40,9 @@ get_default_params <- function() {
     deposition_param = 0,
     taphonomy_regime = NULL,
     loss_strength    = 'no_decay',
-    age_noise        = FALSE
+    age_noise        = FALSE,
+    
+    yearly_updates = FALSE
   )
 }
 

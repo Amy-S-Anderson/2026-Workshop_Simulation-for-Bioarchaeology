@@ -10,5 +10,5 @@ get_default_params()
 A named list of default parameter values
 }
 \description{
-Get default simulation parameters
+Save this function, without any specified arguments, to an object, and that object will be a list of all the default parameter values for Simulate_Cemetery.
 }
