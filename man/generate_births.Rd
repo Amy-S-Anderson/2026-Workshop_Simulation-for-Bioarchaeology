@@ -22,5 +22,6 @@ Data frame with n_births rows ready to rbind() onto the population
 Creates n_births new agents with age 0 and no lesion, with agent_ids
 continuing sequentially from the current maximum in the population. All other
 columns are initialized to match the structure of create_pop().
+This is an internal helper function called by apply_fertility.
 }
 \keyword{internal}
