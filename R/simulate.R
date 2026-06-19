@@ -10,53 +10,6 @@
 #   - Age-specific mortality risks follow a Siler function
 
 
-# --- Internal helpers (not exported) ---
-
-#' Create the initial pop data frame
-#' 
-#' 
-#' Compute discrete Siler survivorship l(x)
-#'
-#' Returns the probability of surviving from birth to each age x, under the
-#' Siler hazard model. l(0) is defined as 1 (everyone is alive at birth).
-#'
-#' @param ages Integer vector of ages (typically 0:max_age)
-#' @param mortality_regime Data frame with Siler parameters (a1, b1, a2, a3, b3)
-#' @return Numeric vector of survivorship values, same length as ages
-#' @keywords internal
-compute_siler_survivorship <- function(ages, mortality_regime) {
-  hazards        <- compute_siler_risk(ages, mortality_regime)
-  survival_probs <- 1 - hazards
-  cumprod(c(1, survival_probs[-length(survival_probs)]))
-}
-
-
-
-#' Compute Siler hazard for a given age
-#' @param ages Integer vector, if population is age-structured
-#' @param mortality_regime Data frame with Siler parameters (a1, b1, a2, a3, b3)
-#' @return Numeric hazard value
-#' @keywords internal
-compute_siler_risk <- function(ages, mortality_regime) { 
-  if (any(mortality_regime < 0)) {
-    stop('No parameters of the mortality regime can be negative')
-  }
-  if(mortality_regime$a3 < 1){ # These are traditional Siler parameters
-    age_based_risk <- mortality_regime$a1 * exp(-mortality_regime$b1 * ages) +
-      mortality_regime$a2 +
-      mortality_regime$a3 * exp(mortality_regime$b3 * ages)
-  }
-  if(mortality_regime$a3 > 1){ # These are robust Siler parameters
-    mortality_regime <- demohaz_to_trad_siler_param(mortality_regime)
-    age_based_risk <- mortality_regime$a1 * exp(-mortality_regime$b1 * ages) +
-      mortality_regime$a2 +
-      mortality_regime$a3 * exp(mortality_regime$b3 * ages)
-  }
-  age_based_risk
-}
-
-
-
 
 #' Sample which agents are exposed to lesion-causing conditions this timestep
 #'
@@ -151,101 +104,7 @@ form_lesions <- function(pop,
 
 
 
-#' Vectorized mortality across all living agents
-#'
-#'
-#' @param pop Population data frame
-#' @param current_time Integer, the current time step in the model
-#' @param age_based_risk Baseline Siler mortality risk at current age (scalar or vector, depending on population age structure)
-#' @param mortality_risk_type One of "proportional", "time_decreasing", "time_increasing"
-#' @param risk_factors Named list of risk factor columns. For continuous columns
-#'   (e.g. frailty, acquired_frailty) whose values ARE the proportional hazard,
-#'   set the value to NULL. For binary (0/1) columns (e.g. lesion), supply the
-#'   proportional hazard as a numeric scalar (e.g. list(lesion = 2.1)).
-#' @return Updated pop data frame
-#' @keywords internal
-#' 
-
-apply_mortality <- function(pop,
-                            age_based_risk,
-                            mortality_risk_type = "proportional",
-                            risk_factors = list(),
-                            current_time,
-                            lesion_requires_survival = FALSE,
-                            exposure_causes_hazard = FALSE,
-                            hazard_is_transient = FALSE,
-                            exposure_hazard_multiplier = 1,
-                            lesion_formation_window = NULL) {
-  
-  death_dice <- runif(nrow(pop), 0, 1)
-  ages       <- pop$age
-  
-  hazard_multiplier <- rep(1, nrow(pop))
-  
-  for (factor_name in names(risk_factors)) {
-    if (!factor_name %in% names(pop)) next
-    col <- pop[[factor_name]]
-    col[is.na(col)] <- 1
-    factor_spec <- risk_factors[[factor_name]]
-    
-    if (is.null(factor_spec)) {
-      hazard_multiplier <- hazard_multiplier * col
-    } else if (is.numeric(factor_spec) && length(factor_spec) == 1) {
-      hazard_multiplier <- hazard_multiplier * ifelse(col == 1, factor_spec, 1)
-    } else {
-      warning(sprintf("risk_factors[['%s']] must be NULL or a single numeric. Skipping.",
-                      factor_name))
-    }
-  }
-  
-  # Apply transient hazard if present
-  if ("transient_hazard" %in% names(pop)) {
-    hazard_multiplier <- hazard_multiplier * pop$transient_hazard
-  }
-  
-  # In lesion_requires_survival cases, apply exposure hazard before mortality check
-  # (form_lesions hasn't run yet, so we apply the hazard directly here)
-  if (lesion_requires_survival && exposure_causes_hazard && "exposed_this_step" %in% names(pop)) {
-    if (hazard_is_transient) {
-      hazard_multiplier <- hazard_multiplier * ifelse(pop$exposed_this_step,
-                                                      exposure_hazard_multiplier, 1)
-    } else {
-      # Permanent frailty for lesion_requires_survival cases is handled in
-      # form_lesions() after this function returns, for survivors only
-    }
-  }
-  
-  threshold <- dplyr::case_when(
-    mortality_risk_type == "proportional"    ~ age_based_risk * hazard_multiplier,
-    mortality_risk_type == "time_decreasing" ~ age_based_risk * hazard_multiplier / ((ages / 10) + hazard_multiplier),
-    mortality_risk_type == "time_increasing" ~ age_based_risk * ((ages / 10) + hazard_multiplier) / hazard_multiplier,
-    .default = age_based_risk * hazard_multiplier
-  )
-  
-  died <- death_dice < threshold
-  
-  # Strip step-level columns from decedents unconditionally
-  decedents_this_step <- pop[died, ]
-  if ("transient_hazard"   %in% names(decedents_this_step)) decedents_this_step$transient_hazard   <- NULL
-  if ("exposed_this_step"  %in% names(decedents_this_step)) decedents_this_step$exposed_this_step  <- NULL
-  if (nrow(decedents_this_step) > 0) {
-    decedents_this_step$year_died <- current_time
-  }
-  
-  # Strip step-level columns from survivors, EXCEPT keep exposed_this_step
-  # when lesion_requires_survival = TRUE so form_lesions() can still read it
-  survivors <- pop[!died, ]
-  if ("transient_hazard" %in% names(survivors)) survivors$transient_hazard <- NULL
-  if (!lesion_requires_survival && "exposed_this_step" %in% names(survivors)) {
-    survivors$exposed_this_step <- NULL
-  }
-  
-  list(
-    pop       = survivors,
-    decedents = decedents_this_step
-  )
-}
-
+ 
 
 #' Record survivor snapshot for the current timestep. 
 #' @param pop Population data frame
@@ -398,9 +257,6 @@ Simulate_Cemetery <- function(# Time arguments
     # exit the loop when current_time is greater than max_years. This is only relevant when modeling a dynamic population, i.e., one where agents are born into the model world rather than just created by create_pop().
     if (!is.null(tfr) && current_time > max_years) break
     
-    # calculate baseline mortality hazard for each agent (determined by agent's age)
-    age_based_risk <- compute_siler_risk(ages = pop$age, mortality_regime = mortality_regime)
-    
     # Sample exposure first, so both form_lesions() and apply_mortality() can read it
     if (!is.null(annual_exposure)) {
       pop <- sample_exposure(pop, annual_exposure)
@@ -409,7 +265,7 @@ Simulate_Cemetery <- function(# Time arguments
     if (lesion_requires_survival) {
       # Mortality check first; lesion forms only for survivors
       updated_pop <- apply_mortality(pop,
-                                     age_based_risk,
+                                     schedule = mortality_regime,
                                      mortality_risk_type,
                                      current_time            = current_time,
                                      risk_factors            = list(frailty          = NULL,
@@ -447,7 +303,7 @@ Simulate_Cemetery <- function(# Time arguments
       }
       
       updated_pop <- apply_mortality(pop,
-                                     age_based_risk,
+                                     schedule = mortality_regime,
                                      mortality_risk_type,
                                      current_time = current_time,
                                      risk_factors = list(frailty          = NULL,

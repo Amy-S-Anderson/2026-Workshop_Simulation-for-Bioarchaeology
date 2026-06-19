@@ -2,7 +2,7 @@
 % Please edit documentation in R/mortality.R
 \name{apply_mortality_usher3}
 \alias{apply_mortality_usher3}
-\title{Apply Mortality to Agent Population}
+\title{Apply mortality using usher3}
 \usage{
 apply_mortality_usher3(state, mortality_model, mortality_param, dx)
 }
