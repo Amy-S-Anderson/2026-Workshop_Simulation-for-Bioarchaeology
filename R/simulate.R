@@ -455,7 +455,7 @@ Simulate_Cemetery <- function(# Time arguments
     }
     
     if (age_structured == TRUE) {
-      pop <- apply_fertility(pop, tfr = tfr, asfr = asfr, current_time = current_time, dx = dx, pop_config)
+      pop <- apply_fertility(pop, tfr = tfr, asfr = asfr, time = current_time, dx = dx, pop_config)
     }
     
     current_time <- current_time + 1
@@ -466,6 +466,8 @@ Simulate_Cemetery <- function(# Time arguments
     } else {
       pop_size[[current_time]] <- data.frame(Time = current_time, n = nrow(pop))
     }
+    print(paste0("Year ", current_time))
+    print(paste0("Pop_size = ", nrow(pop)))
   }
   
   # If this is a single-generation model (no Total Fertility Rate specified for agents)
