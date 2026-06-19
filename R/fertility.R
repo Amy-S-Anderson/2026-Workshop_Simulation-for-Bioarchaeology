@@ -56,6 +56,7 @@ compute_trapezoid_asfr <- function(ages,
 #' Creates n_births new agents with age 0 and no lesion, with agent_ids
 #' continuing sequentially from the current maximum in the population. All other
 #' columns are initialized to match the structure of create_pop().
+#' This is an internal helper function called by apply_fertility. 
 #'
 #' @param pop Population data frame (used to determine next agent_id)
 #' @param current_time Numeric. Time counter for ABM main loop. 
@@ -63,7 +64,6 @@ compute_trapezoid_asfr <- function(ages,
 #' @param pop_config A list of parameters for the initial population so that new agents will have matching trait columns. Defaults to the pop_config object that should be automatically defined earlier in Simulate_Cemetery, before the main ABM loop. 
 #' @return Data frame with n_births rows ready to rbind() onto the population
 #' @keywords internal
-#' @export
 
 generate_births <- function(pop, current_time, n_births, pop_config) {
   if (n_births == 0L) return(pop[0, ])
