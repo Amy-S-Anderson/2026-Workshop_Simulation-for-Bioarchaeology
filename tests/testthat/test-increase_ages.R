@@ -60,7 +60,7 @@ test_that("age_pop raises error when input dataframe does contain a column calle
 
 test_that("age_pop raises error when age is not numeric", {
   state <- create_test_state()
-  state$age <- as.factor(state$age)
+  state$age <- as.character(state$age)
   
   expect_error(
     age_pop(
