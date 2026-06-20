@@ -1,3 +1,100 @@
+
+
+
+#' @title Apply lesion formation before or after mortality
+#'
+#' @description a single vectorized draw to update each agent's lesion state. Agents who do not have a lesion may acquire one during this action, if they meet the conditional requirements defined by the function arguments. Lesions can either form probabilistically, according to a lesion formation rate, or they can form deterministically, according to the proportion of agents exposed to lesion-causing conditions (annual_exposure). Lesion formation rate will be a better predictor of the number of lesions that form, since annual exposure is spread evenly across agents of all ages, and not all ages are capable of forming lesions (ages of lesion formation are determined by the values of the lesion formation window.)
+#'
+#'#' Note: These aren't quite parallel options. if(lesion_formation_rate) is used, then acquired frailty values aren't updated. Right now frailty is only integrated with deterministic lesion formation, not probabilistic lesion formation. 
+#' @param pop Population data frame
+#' @param lesion_formation_window numeric vector of length = 2. c(Age at which lesions can start forming, Age at which lesions stop forming)
+#' @param lesion_formation_rate A probability
+#' @param annual_exposure A proportion. If lesion_formation_rate has a value then annual_exposure should be set to NULL, and vice versa. 
+#' @param exposure_causes_hazard Logical. Does exposure to lesion-causing events affect mortality hazard?
+#' @param hazard_is_transient Logical. If true, exposure-mediated change in mortality hazard last only for the year of exposure.
+#' @param exposure_hazard_multiplier Numeric. The amount to multiply an agent's mortality hazard if exposure_causes_hazard == TRUE. 
+#' @return Updated pop data frame
+#' @keywords internal
+#' @export
+form_lesions <- function(pop,
+                         lesion_formation_window,
+                         lesion_formation_rate = NULL,
+                         annual_exposure = NULL,
+                         exposure_causes_hazard = FALSE,
+                         hazard_is_transient = FALSE,
+                         exposure_hazard_multiplier = 1) {
+  
+  # -----------------------------------------------------------------------------
+  # Input validation
+  # -----------------------------------------------------------------------------
+  
+  # Exactly one of lesion_formation_rate / annual_exposure must be supplied
+  n_specified <- sum(!is.null(lesion_formation_rate), !is.null(annual_exposure))
+  if (n_specified != 1) {
+    stop("Exactly one of lesion_formation_rate or annual_exposure must be specified.")
+  }
+  
+  # Range-check whichever one was supplied
+  if (!is.null(lesion_formation_rate) &&
+      (lesion_formation_rate < 0 || lesion_formation_rate > 1)) {
+    stop("lesion_formation_rate must be between 0 and 1")
+  }
+  if (!is.null(annual_exposure) &&
+      (annual_exposure < 0 || annual_exposure > 1)) {
+    stop("annual_exposure must be between 0 and 1")
+  }
+  
+  # lesion_formation_window bounds
+  if (lesion_formation_window[1] < 0) {
+    stop("formation_window_opens must be non-negative")
+  }
+  if (lesion_formation_window[2] < lesion_formation_window[1]) {
+    stop("formation_window_closes must be >= formation_window_opens")
+  }
+  
+  
+  # Identify agents whose ages fall within the range of the lesion formation window. 
+  in_window <- pop$age >= lesion_formation_window[1] &
+    pop$age <= lesion_formation_window[2]
+  
+  if(!is.null(annual_exposure))
+  # Annual exposure framework: reads exposed_this_step written by sample_exposure()
+  exposed <- pop$exposed_this_step
+  
+  # Form lesions immediately (lesion_requires_survival = FALSE cases)
+  pop$lesion <- pmax(pop$lesion, as.integer(in_window & exposed), na.rm = TRUE)
+  
+  # Apply hazard effects if applicable
+  if (exposure_causes_hazard) {
+    if (hazard_is_transient) {
+      # Transient: write to transient_hazard, read by apply_mortality() this step only
+      pop$transient_hazard <- ifelse(exposed, exposure_hazard_multiplier, 1)
+    } else {
+      # Permanent: accumulate into acquired_frailty
+      if ("acquired_frailty" %in% names(pop)) {
+        pop$acquired_frailty[is.na(pop$acquired_frailty)] <- 0
+        pop$acquired_frailty <- ifelse(exposed,
+                                       pop$acquired_frailty + exposure_hazard_multiplier,
+                                       pop$acquired_frailty)
+      }
+    }
+  }
+  
+  pop
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 #' @title Apply Lesion Acquisition to Agent Population
 #'
 #' @description Applies a single time step of lesion acquisition to a
@@ -65,9 +162,7 @@
 #' state <- data.frame(
 #'   agent_id = 1:10,
 #'   age = c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
-#'   lesion = rep(FALSE, 10),
-#'   dead = rep(FALSE, 10),
-#'   in_sample = rep(TRUE, 10)
+#'   lesion = rep(FALSE, 10)
 #' )
 #'
 #' # Apply lesion acquisition with window [0, 6)

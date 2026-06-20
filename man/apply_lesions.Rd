@@ -75,9 +75,7 @@ increments are handled by separate modules.
 state <- data.frame(
   agent_id = 1:10,
   age = c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
-  lesion = rep(FALSE, 10),
-  dead = rep(FALSE, 10),
-  in_sample = rep(TRUE, 10)
+  lesion = rep(FALSE, 10)
 )
 
 # Apply lesion acquisition with window [0, 6)
