@@ -11,29 +11,6 @@
 
 
 
-#' Sample which agents are exposed to lesion-causing conditions this timestep
-#'
-#' Runs before form_lesions() and apply_mortality() each timestep.
-#' Writes exposed_this_step (logical) and increments n_stress_events for
-#' exposed agents.
-#'
-#' @param pop Population data frame
-#' @param annual_exposure Numeric proportion of agents exposed each timestep
-#' @return Updated pop data frame
-#' @keywords internal
-sample_exposure <- function(pop, annual_exposure) {
-  
-  stress <- vector(mode = "logical", length = nrow(pop))
-  n_exposed <- round(nrow(pop) * annual_exposure)
-  stress[1:n_exposed] <- TRUE
-  pop$exposed_this_step <- sample(stress, size = nrow(pop), replace = FALSE)
-  
-  if ("n_stress_events" %in% names(pop)) {
-    pop$n_stress_events <- pop$n_stress_events + as.integer(pop$exposed_this_step)
-  }
-  
-  pop
-}
 
 
 
@@ -340,14 +317,18 @@ Simulate_Cemetery <- function(# Time arguments
     decedents[[current_time]] <- pop
     decedents[[current_time]]$year_died <- current_time 
   }
+ 
+  # Transform decedents from a list of data frames to a single data frame
+  decedents <- do.call(rbind, decedents) 
   
+  # Add post-mortem processes to all decedents:
   # Apply deposition bias (if any)
-  ### This function still needs troubleshooting/updating
-  # decedents <- apply_deposition(decedents,
-  #                            deposition_model = 'cutoff',
-  #                            deposition_param = deposition_param,
-  #                            dx = 1)
-  # decedents$in_sample <- decedents$was_deposited
+  decedents <- apply_deposition(decedents,
+                             deposition_model = 'cutoff',
+                             deposition_param = deposition_param,
+                             dx = 1)
+  
+  decedents$in_sample <- decedents$was_deposited
 
   # Apply preservation bias (if any)
   if (loss_strength != 'no_decay') {
@@ -376,7 +357,7 @@ Simulate_Cemetery <- function(# Time arguments
   } else{ # If it is a single generation of agents, record the survivors in each year
     annual_census = rbind(starting_cohort, do.call(rbind, survivors))
   }
-  output <- list(individual_outcomes = do.call(rbind, decedents), 
+  output <- list(individual_outcomes = decedents, 
                  annual_census = annual_census)
   
   return(output)
