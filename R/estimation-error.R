@@ -41,11 +41,11 @@
 #' @param error_param Numeric vector containing the error parameters. For the
 #'   \code{"bespoke_increasing_sd"} model, this must be a length-4 vector:
 #'   \describe{
-#'     \item{sd_per_year}(Element 1){Rate at which SD increases per year after age 20.
+#'     \item{sd_per_year}{(Element 1) Rate at which SD increases per year after age 20.
 #'       Default calibration: 0.1375 gives SD ≈ 7.5 at age 60.}
-#'     \item{sd_at_20}(Element 2) {SD of random error at age 20. Default: 2.}
-#'     \item{bias_start}(Element 3){Age at which systematic bias begins. Default: 60.}
-#'     \item{bias_at_90}(Element 4){Mean systematic error at age 90. Default: 25.}
+#'     \item{sd_at_20}{(Element 2) SD of random error at age 20. Default: 2.}
+#'     \item{bias_start}{(Element 3) Age at which systematic bias begins. Default: 60.}
+#'     \item{bias_at_90}{(Element 4) Mean systematic error at age 90. Default: 25.}
 #'   }
 #'
 #' @return A data.frame with the same structure as \code{state}, plus a new
