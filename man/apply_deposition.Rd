@@ -66,7 +66,6 @@ state <- data.frame(
   agent_id = 1:10,
   age = c(0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7),
   lesion = rep(FALSE, 10),
-  dead = rep(TRUE, 10),
   was_deposited = rep(FALSE, 10),
   in_sample = rep(TRUE, 10)
 )

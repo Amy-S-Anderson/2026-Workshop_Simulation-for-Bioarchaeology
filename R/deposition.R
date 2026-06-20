@@ -56,7 +56,6 @@
 #'   agent_id = 1:10,
 #'   age = c(0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7),
 #'   lesion = rep(FALSE, 10),
-#'   dead = rep(TRUE, 10),
 #'   was_deposited = rep(FALSE, 10),
 #'   in_sample = rep(TRUE, 10)
 #' )
@@ -110,11 +109,12 @@ apply_deposition <- function(decedents,
   # Identify dead agents eligible for deposition
   # ---------------------------------------------------------------------------
 
+  #.... I'm not sure this if statement needs to be included, now that the function runs on a data frame of only deceased agents, rather than a data frame of all agents with a column to indicate agent state (alive/dead)
   # Only dead agents can be deposited
   # If no one is dead, return early
-  if (nrow(decedents) == 0) {
-    return(result)
-  }
+  # if (nrow(decedents) < 1) {
+  #   return(result)
+  # }
 
   # ---------------------------------------------------------------------------
   # Apply deposition logic (model-specific)
@@ -122,12 +122,8 @@ apply_deposition <- function(decedents,
 
   if (deposition_model == "cutoff") {
     # Deterministic: deposit if age >= cutoff
-    ages <- decedents$ages
-    deposited <- ages >= cutoff_age
-    deposited_idx <- decedents[deposited]
-
     # Mark deposited agents
-    result$was_deposited[deposited_idx] <- TRUE
+    result$was_deposited <- decedents$age >= cutoff_age
   }
 
   # ---------------------------------------------------------------------------
