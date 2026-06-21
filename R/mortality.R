@@ -1,5 +1,8 @@
 #' Helper functions for calculating mortality risk
 
+#... I think these might be unnecessary now that defrail_siler is in the mix. 
+
+
 #'@title Siler hazard (helper)
 #'@description Compute Siler hazard for a given age. This helper function is referenced in apply_mortality(). 
 #'
@@ -73,8 +76,8 @@ lesion_formation_window = NULL) {
   ages       <- pop$age
   hazard_multiplier <- rep(1, nrow(pop))
   
-  # calculate baseline mortality hazard for each agent (determined by agent's age)
-  age_based_risk <- compute_siler_risk(ages = pop$age, mortality_regime = schedule)
+  # Look up baseline mortality hazard for each agent (determined earlier in defrail_siler by agent's age and stable frailty value)
+  age_based_risk <- mu0_table$mu0[match(pop$age, mu0_table$age)]
   
   for (factor_name in names(risk_factors)) {
     if (!factor_name %in% names(pop)) next
@@ -110,9 +113,9 @@ lesion_formation_window = NULL) {
   }
   
   threshold <- dplyr::case_when(
-    mortality_risk_type == "proportional"    ~ age_based_risk * hazard_multiplier,
-    mortality_risk_type == "time_decreasing" ~ age_based_risk * hazard_multiplier / ((ages / 10) + hazard_multiplier),
-    mortality_risk_type == "time_increasing" ~ age_based_risk * ((ages / 10) + hazard_multiplier) / hazard_multiplier,
+    mortality_risk_type == "proportional"    ~ age_based_risk * pop$frailty * hazard_multiplier,
+    mortality_risk_type == "time_decreasing" ~ age_based_risk * pop$frailty * hazard_multiplier / ((ages / 10) + hazard_multiplier),
+    mortality_risk_type == "time_increasing" ~ age_based_risk * pop$frailty * ((ages / 10) + hazard_multiplier) / hazard_multiplier,
     .default = age_based_risk * hazard_multiplier
   )
   
