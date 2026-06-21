@@ -42,10 +42,13 @@ create_pop <- function(pop0_size, age_structured,
       relocate(lesion, .after = age) # change position of lesion column so it sits to the right of 'age'
   }
   if(pop_config$model_frailty){
-    if(is.null(c(pop_config$gammafrailty_shape, pop_config$gammafrailty_scale))){
-      print("model_frailty = TRUE, but you have not specified shape and scale arguments for the frailty distribution.")
+    pop0$frailty <- if (pop_config$frailty_variance == 0) {
+      rep(1, pop0_size)
+    } else {
+      rgamma(pop0_size,
+             shape = 1 / pop_config$frailty_variance, # this holds mean at 1 for all values of variance. 
+             scale = pop_config$frailty_variance)
     }
-    pop0$frailty <- rgamma(pop0_size, shape = pop_config$gammafrailty_shape, scale = pop_config$gammafrailty_scale)
     pop0$acquired_frailty = NA_real_
   }
   if (!is.null(pop_config$annual_exposure)) {
