@@ -167,9 +167,8 @@ Simulate_Cemetery <- function(# Time arguments
                               lesion_related_hazard = 1, # This is only called if lesion modifies mortality hazard directly
 
                               # Frailty arguments
-                              gammafrailty_shape = NULL,
-                              gammafrailty_scale = NULL,
-                              
+                              gammafrailty_variance = NULL,
+
                               # Exposure-lesion-hazard relationships
                               exposure_causes_hazard   = FALSE,  # does exposure to lesion-causing events modify mortality?
                               hazard_is_transient      = FALSE,  # TRUE = year of exposure only, FALSE = permanent
@@ -192,15 +191,14 @@ Simulate_Cemetery <- function(# Time arguments
   
   # Logical: Does this simulation include skeletal lesion formation?
   model_lesions <- !is.null(lesion_formation_rate) | !is.null(annual_exposure)
-  model_frailty <- !is.null(gammafrailty_shape)
+  model_frailty <- !is.null(gammafrailty_variance)
   
   # Hold population configuration parameters here for ease of reference in functions that follow. 
   pop_config <- list(
     model_lesions              = model_lesions,
     annual_exposure            = annual_exposure,
     model_frailty              = model_frailty,
-    gammafrailty_shape         = gammafrailty_shape,
-    gammafrailty_scale         = gammafrailty_scale,
+    gammafrailty_variance         = gammafrailty_variance,
     lesion_formation_window    = lesion_formation_window,
     exposure_causes_hazard     = exposure_causes_hazard,
     hazard_is_transient        = hazard_is_transient,
@@ -220,6 +218,9 @@ Simulate_Cemetery <- function(# Time arguments
     asfr <- compute_trapezoid_asfr(ages = 0:100, tfr = tfr)
   }
 
+  # Calculate age-specific mortality hazards across individual frailty values by 'defrailing' the Siler function, which gives average mortality hazard at each age. 
+  mu0_table <- defrail_siler(mortality_regime, frailty_variance)
+  
   # Set up lists to track output
   survivors <- vector("list", max_years)
   pop_size <- vector("list", max_years) 
