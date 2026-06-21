@@ -29,9 +29,8 @@ get_default_params <- function() {
     mortality_risk_type      = "proportional",
     lesion_related_hazard    = 1,
     
-    gammafrailty_shape = NULL,
-    gammafrailty_scale = NULL,
-    
+    gammafrailty_variance = NULL,
+
     exposure_causes_hazard     = FALSE,
     hazard_is_transient        = FALSE,
     lesion_requires_survival   = FALSE,
