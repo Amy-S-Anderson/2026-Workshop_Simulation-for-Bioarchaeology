@@ -4,7 +4,13 @@
 \alias{defrail_siler}
 \title{Defrail a Siler mortality regime}
 \usage{
-defrail_siler(mortality_regime, frailty_variance, max_age = 120, step = 0.01)
+defrail_siler(
+  mortality_regime,
+  frailty_variance,
+  max_age = 120,
+  max_survivable_age = 110,
+  step = 0.01
+)
 }
 \arguments{
 \item{mortality_regime}{Data frame with Siler parameters (a1, b1, a2, a3, b3)}

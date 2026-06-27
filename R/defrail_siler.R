@@ -26,20 +26,22 @@
 #' @export
 defrail_siler <- function(mortality_regime,
                           frailty_variance,
-                          max_age = 120,
-                          step    = 0.01) {
+                          max_age             = 120,
+                          max_survivable_age  = 110,
+                          step                = 0.01) {
   
-  if (frailty_variance < 0) {
-    stop("frailty_variance must be non-negative")
-  }
   
-  # If frailty_variance == 0, the defrailed hazard is just the observed hazard
-  if (frailty_variance == 0) {
+  # If frailty_variance == 0, or if frailty_variance is not specified, the defrailed hazard is just the observed hazard
+  if (frailty_variance == 0 || is.null(frailty_variance)) {
     ages <- 0:max_age
     return(data.frame(
       age = ages,
-      mu0 = compute_siler_risk(ages, mortality_regime)
+      mu0 = compute_siler_risk(ages, mortality_regime) # this helper function is in mortality.R
     ))
+  }
+  
+  if (frailty_variance < 0) {
+    stop("frailty_variance must be non-negative")
   }
   
   s2 <- frailty_variance
@@ -72,12 +74,36 @@ defrail_siler <- function(mortality_regime,
     mu0_fine[i + 1] <- dH0_da(a + step, H0_fine[i + 1])
   }
   
-  # Sample mu0 at integer ages for the lookup table
-  integer_indices <- round(0:max_age / step) + 1
-  integer_indices <- pmin(integer_indices, n)   # guard against rounding past end
+  # Guard: check that defrailed hazard kills off the population by age 110
+  # Guard: check survivorship at max_survivable_age
+  max_survival_at_cap <- 0.001
+  idx_cap             <- round(max_survivable_age / step) + 1
+  H0_at_cap           <- H0_fine[min(idx_cap, n)]
+  survival_at_cap     <- exp(-H0_at_cap)
+  
+  if (survival_at_cap > max_survival_at_cap) {
+    stop(sprintf(
+      paste0("The combination of this mortality regime and frailty_variance = %.4f ",
+             "produces a defrailed baseline hazard under which %.2f%% of agents ",
+             "would survive to age %d. ",
+             "Reduce frailty_variance so that the low-frailty tail of the population ",
+             "does not produce implausibly long lifespans."),
+      frailty_variance,
+      survival_at_cap * 100,
+      max_survivable_age
+    ))
+  }
+  
+  #   # Sample mu0 at integer ages for the lookup table. Clip output table to max_survivable_age
+  integer_ages    <- 0:min(max_age, max_survivable_age)
+  integer_indices <- round(integer_ages / step) + 1
+  integer_indices <- pmin(integer_indices, n)
   
   data.frame(
-    age = 0:max_age,
+    age = integer_ages,
     mu0 = mu0_fine[integer_indices]
   )
 }
+
+
+

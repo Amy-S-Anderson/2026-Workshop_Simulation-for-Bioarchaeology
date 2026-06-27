@@ -41,16 +41,20 @@ create_pop <- function(pop0_size, age_structured,
       mutate(lesion = if_else(pop0$age %in% pop_config$lesion_formation_window[1]:pop_config$lesion_formation_window[2], 0, NA_real_)) %>% 
       relocate(lesion, .after = age) # change position of lesion column so it sits to the right of 'age'
   }
-  if(pop_config$model_frailty){
-    pop0$frailty <- if (pop_config$frailty_variance == 0) {
-      rep(1, pop0_size)
-    } else {
-      rgamma(pop0_size,
+
+    if (pop_config$frailty_variance > 0){
+      pop0$frailty <- rgamma(pop0_size,
              shape = 1 / pop_config$frailty_variance, # this holds mean at 1 for all values of variance. 
              scale = pop_config$frailty_variance)
+    } else{
+    # if frailty_variance = 0 or is set to NULL, everyone has a frailty value of 1.
+    pop0$frailty <- 1 
     }
-    pop0$acquired_frailty = NA_real_
+  
+  if(pop_config$model_frailty){
+    pop0$acquired_frailty <- NA_real_
   }
+
   if (!is.null(pop_config$annual_exposure)) {
     pop0$n_stress_events <- 0L
   }
