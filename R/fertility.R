@@ -81,9 +81,11 @@ generate_births <- function(pop, current_time, n_births, pop_config) {
   }
   if (pop_config$model_frailty) {
     new_agents$frailty          <- rgamma(n_births,
-                                          shape = pop_config$gammafrailty_shape,
-                                          scale = pop_config$gammafrailty_scale)
+                                                       shape = 1 / pop_config$frailty_variance, # this holds mean at 1 for all values of variance. 
+                                                       scale = pop_config$frailty_variance)
     new_agents$acquired_frailty <- NA_real_
+  } else{
+    new_agents$frailty <- 1
   }
   
   if ("n_stress_events" %in% names(pop)) {
