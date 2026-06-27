@@ -6,7 +6,7 @@
 \usage{
 apply_mortality(
   pop,
-  schedule,
+  mu0_lookup,
   mortality_risk_type = "proportional",
   risk_factors = list(),
   current_time,
@@ -20,8 +20,6 @@ apply_mortality(
 \arguments{
 \item{pop}{Population data frame}
 
-\item{schedule}{Named vector of Siler parameter values. The mortality regime for baseline hazards, before being modified by individual traits/states beyond age.}
-
 \item{mortality_risk_type}{One of "proportional", "time_decreasing", "time_increasing"}
 
 \item{risk_factors}{Named list of risk factor columns. For continuous columns
@@ -30,6 +28,10 @@ set the value to NULL. For binary (0/1) columns (e.g. lesion), supply the
 proportional hazard as a numeric scalar (e.g. list(lesion = 2.1)).}
 
 \item{current_time}{Integer, the current time step in the model}
+
+\item{m0_lookup}{data.frame, created by defrail_siler at the top of Simulate_Cemetery. Defaults to NULL, in which case there is no heterogeneity in individual frailty at birth.}
+
+\item{schedule}{Named vector of Siler parameter values. The mortality regime for baseline hazards, before being modified by individual traits/states beyond age.}
 }
 \value{
 Updated pop data frame

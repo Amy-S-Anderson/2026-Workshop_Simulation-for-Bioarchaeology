@@ -51,6 +51,7 @@ compute_siler_survivorship <- function(ages, mortality_regime) {
 #' 
 #' @param pop Population data frame
 #' @param current_time Integer, the current time step in the model
+#' @param m0_lookup data.frame, created by defrail_siler at the top of Simulate_Cemetery. Defaults to NULL, in which case there is no heterogeneity in individual frailty at birth.
 #' @param schedule Named vector of Siler parameter values. The mortality regime for baseline hazards, before being modified by individual traits/states beyond age. 
 #' @param mortality_risk_type One of "proportional", "time_decreasing", "time_increasing"
 #' @param risk_factors Named list of risk factor columns. For continuous columns
@@ -62,22 +63,18 @@ compute_siler_survivorship <- function(ages, mortality_regime) {
 #' @export
 
 apply_mortality <- function(pop,
-schedule,
-mortality_risk_type = "proportional",
-risk_factors = list(),
-current_time,
-lesion_requires_survival = FALSE,
-exposure_causes_hazard = FALSE,
-hazard_is_transient = FALSE,
-exposure_hazard_multiplier = 1,
-lesion_formation_window = NULL) {
+                            mu0_lookup,
+                            mortality_risk_type = "proportional",
+                            risk_factors        = list(),
+                            current_time,
+                            lesion_requires_survival    = FALSE,
+                            exposure_causes_hazard      = FALSE,
+                            hazard_is_transient         = FALSE,
+                            exposure_hazard_multiplier  = 1,
+                            lesion_formation_window     = NULL) {
   
-  death_dice <- runif(nrow(pop), 0, 1)
-  ages       <- pop$age
-  hazard_multiplier <- rep(1, nrow(pop))
-  
-  # Look up baseline mortality hazard for each agent (determined earlier in defrail_siler by agent's age and stable frailty value)
-  age_based_risk <- mu0_table$mu0[match(pop$age, mu0_table$age)]
+  age_based_risk <- mu0_lookup$mu0[match(pop$age, mu0_lookup$age)]
+  hazard_multiplier <- 1
   
   for (factor_name in names(risk_factors)) {
     if (!factor_name %in% names(pop)) next
@@ -112,13 +109,15 @@ lesion_formation_window = NULL) {
     }
   }
   
-  threshold <- dplyr::case_when(
-    mortality_risk_type == "proportional"    ~ age_based_risk * pop$frailty * hazard_multiplier,
-    mortality_risk_type == "time_decreasing" ~ age_based_risk * pop$frailty * hazard_multiplier / ((ages / 10) + hazard_multiplier),
-    mortality_risk_type == "time_increasing" ~ age_based_risk * pop$frailty * ((ages / 10) + hazard_multiplier) / hazard_multiplier,
-    .default = age_based_risk * hazard_multiplier
-  )
+  if(mortality_risk_type == "proportional"){
+    threshold <- 1 - exp(-age_based_risk * pop$frailty * hazard_multiplier)
+  } else if(mortality_risk_type == "time_decreasing"){
+    threshold <- 1 - exp(-age_based_risk * pop$frailty * hazard_multiplier / ((pop$age / 10) + hazard_multiplier))
+  } else if(mortality_risk_type == "time_increasing"){
+    threshold <- 1 - exp(-age_based_risk * pop$frailty * ((pop$age / 10) + hazard_multiplier) / hazard_multiplier)
+  }
   
+  death_dice <- runif(n = nrow(pop), min = 0, max = 1)
   died <- death_dice < threshold
   
   # Strip step-level columns from decedents unconditionally
