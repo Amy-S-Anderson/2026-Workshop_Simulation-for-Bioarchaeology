@@ -81,27 +81,6 @@ form_lesions <- function(pop,
 
 
 
- 
-
-#' Record survivor snapshot for the current timestep. 
-#' @param pop Population data frame
-#' @param current_time Current timestep
-#' @param model_lesions Logical
-#' @return One-row data frame with Age, Alive, Lesion, Lesion_perc
-#' @keywords internal
-record_cohort_survivors <- function(pop, current_time, model_lesions) {
-    survivors <- data.frame(Time = current_time,
-                            Age = unique(pop$age), 
-                            Alive = nrow(pop))
-    if(model_lesions){
-      survivors$Lesion = sum(pop$lesion, na.rm = TRUE)
-      survivors$Lesion_perc = round((sum(pop$lesion, na.rm = TRUE) / nrow(pop)) * 100, 1)
-    }
-    
-  survivors
-}
-
-
 
 # --- Main simulation function (exported) ---
 
@@ -127,7 +106,7 @@ record_cohort_survivors <- function(pop, current_time, model_lesions) {
 #' @param pop_growth_rate Numeric. The population growth rate
 #' @param age_structured Logical. Is the starting population age-structured, or an age cohort?
 #' @param deposition_param Numeric. the minimum age for including agents in the cemetery
-#' @param taphonomy_regime Not sure*** 
+#' @param taphonomy_regime A named data frame storing Siler values. Taphonomic loss, like mortality hazard, is greatest for infants and elders, so we chose to model it using a Siler function.  
 #' @param loss_strength Character. describes age-dependent preservation bias (defaults to 'no_decay')
 #' @param age_noise Logical. If TRUE, then age estimation error is added to estimated age-at-death. 
 #' @param yearly_updates Logical. If TRUE, then the model prints current year and population size at the end of each time step during the model run. Useful for assessing simulation progress, especially when timeframe, TFR, or population size are large.
@@ -155,7 +134,7 @@ Simulate_Cemetery <- function(# Time arguments
                               # Demography arguments
                               pop0_size,
                               age_structured = TRUE, # if FALSE, this is a cohort model (proxy for stationary population)
-                              pop_growth_rate = 0, # defaults to stationary population
+                              pop0_growth_rate = 0, # defaults to stationary population
                               tfr, # total fertility rate, on average, per woman
                               mortality_regime, # A named vector of Siler mortality hazard parameter values
                               
@@ -188,6 +167,9 @@ Simulate_Cemetery <- function(# Time arguments
   if (!is.null(lesion_formation_rate) && lesion_formation_window[2] == 0) {
     warning("lesion_formation_rate is set but formation window closes at 0: no lesions will form.")
   }
+  if(is.numeric(tfr) && age_structured == FALSE){
+    warning("fertility only works for an age-structured population. Either run a cohort with age_structured = FALSE and tfr = NULL, or run an age-structured population with age_structured = TRUE and tfr = a numeric value (0-12). Note that run time may be slow if tfr is large, especially if pop0_size and max_years are also on the high end for archaeological contexts.")
+  }
   
   # Logical: Does this simulation include skeletal lesion formation?
   model_lesions <- !is.null(lesion_formation_rate) | !is.null(annual_exposure)
@@ -198,7 +180,7 @@ Simulate_Cemetery <- function(# Time arguments
     model_lesions              = model_lesions,
     annual_exposure            = annual_exposure,
     model_frailty              = model_frailty,
-    gammafrailty_variance         = gammafrailty_variance,
+    frailty_variance           = gammafrailty_variance,
     lesion_formation_window    = lesion_formation_window,
     exposure_causes_hazard     = exposure_causes_hazard,
     hazard_is_transient        = hazard_is_transient,
@@ -206,21 +188,35 @@ Simulate_Cemetery <- function(# Time arguments
     exposure_hazard_multiplier = exposure_hazard_multiplier
   )
   
-
+  #--------------------------------------------------------------------
+  # Set up the Starting Population
+  #--------------------------------------------------------------------
   # Generate starting cohort or age-structured population at time = 0.
   pop <- create_pop(pop0_size, age_structured = age_structured, 
-                    r = pop_growth_rate, 
+                    r = pop0_growth_rate, 
                     mortality_regime = mortality_regime,
                     pop_config = pop_config)
 
   # Calculate age-specific fertility rate, based on total fertility rate.
-  if(age_structured == TRUE){
+  if(age_structured == TRUE & is.numeric(tfr)){
     asfr <- compute_trapezoid_asfr(ages = 0:100, tfr = tfr)
   }
 
   # Calculate age-specific mortality hazards across individual frailty values by 'defrailing' the Siler function, which gives average mortality hazard at each age. 
-  mu0_table <- defrail_siler(mortality_regime, frailty_variance)
+  mu0_table <- if (!is.null(pop_config$frailty_variance) && pop_config$frailty_variance > 0) {
+    defrail_siler(mortality_regime = params$mortality_regime,
+                  frailty_variance  = pop_config$frailty_variance)
+  } else {
+    ages <- 0:110
+    data.frame(
+      age = ages,
+      mu0 = compute_siler_risk(ages, params$mortality_regime)
+    )
+  }
   
+  #--------------------------------------------------------------------
+  # Get ready to run the clock forward and track the population
+  #--------------------------------------------------------------------
   # Set up lists to track output
   survivors <- vector("list", max_years)
   pop_size <- vector("list", max_years) 
@@ -229,6 +225,9 @@ Simulate_Cemetery <- function(# Time arguments
   
   current_time <- 1  # Initialize current_time counter
   
+  #--------------------------------------------------------------------
+  # Go!
+  #--------------------------------------------------------------------
   # As long as more than 10 people are alive
   while (nrow(pop) > 10) {
     
@@ -243,12 +242,13 @@ Simulate_Cemetery <- function(# Time arguments
     if (lesion_requires_survival) {
       # Mortality check first; lesion forms only for survivors
       updated_pop <- apply_mortality(pop,
-                                     schedule = mortality_regime,
+                                     mu0_lookup = mu0_table,
                                      mortality_risk_type,
                                      current_time            = current_time,
-                                     risk_factors            = list(frailty          = NULL,
-                                                                    acquired_frailty = NULL,
-                                                                    lesion           = lesion_related_hazard),
+                                     risk_factors            = list(
+                                       frailty = NULL,
+                                       acquired_frailty = NULL,
+                                       lesion = lesion_related_hazard),
                                      lesion_requires_survival   = lesion_requires_survival,
                                      exposure_causes_hazard     = exposure_causes_hazard,
                                      hazard_is_transient        = hazard_is_transient,
@@ -281,7 +281,7 @@ Simulate_Cemetery <- function(# Time arguments
       }
       
       updated_pop <- apply_mortality(pop,
-                                     schedule = mortality_regime,
+                                     mu0_lookup = mu0_table,
                                      mortality_risk_type,
                                      current_time = current_time,
                                      risk_factors = list(frailty          = NULL,
@@ -292,12 +292,13 @@ Simulate_Cemetery <- function(# Time arguments
       pop <- updated_pop$pop
     }
     
-    if (age_structured == TRUE) {
+    if (age_structured == TRUE & !is.null(tfr)) {
       pop <- apply_fertility(pop, tfr = tfr, asfr = asfr, time = current_time, dx = dx, pop_config)
     }
     
     current_time <- current_time + 1
     pop <- age_pop(pop)
+   # cat("Time:", current_time, "| nrow:", nrow(pop), "| age col exists:", "age" %in% names(pop), "| unique ages:", length(unique(pop$age)), "\n")
     
     if (age_structured == FALSE) {
       survivors[[current_time]] <- record_cohort_survivors(pop, current_time, model_lesions)
@@ -309,10 +310,8 @@ Simulate_Cemetery <- function(# Time arguments
       print(paste0("Pop_size = ", nrow(pop)))
     }
   }
-  
-  # If this is a single-generation model (no Total Fertility Rate specified for agents)
-  if(is.null(tfr)){
-  # Once 10 or fewer people are left alive — they all enter the cemetery
+  # If this is a single-generation model (tfr = NULL, no agents born into the simulation), then When the population drops to <= 10 people, they all enter the cemetery.
+  if(nrow(pop) > 0){
   # This truncation decision is based on the poor precision/accuracy of skeletal age-at-death estimates at old ages, and to prevent a stochastic model from producing an age outlier; bioarchaeologically we wouldn't be able to see Methuselah. 
     pop <- age_pop(pop) 
     decedents[[current_time]] <- pop
