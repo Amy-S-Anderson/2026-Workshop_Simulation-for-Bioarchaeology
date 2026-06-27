@@ -9,7 +9,7 @@ Simulate_Cemetery(
   max_years = 100,
   pop0_size,
   age_structured = TRUE,
-  pop_growth_rate = 0,
+  pop0_growth_rate = 0,
   tfr,
   mortality_regime,
   lesion_formation_rate = NULL,
@@ -17,8 +17,7 @@ Simulate_Cemetery(
   lesion_formation_window = c(0, 0),
   mortality_risk_type = "proportional",
   lesion_related_hazard = 1,
-  gammafrailty_shape = NULL,
-  gammafrailty_scale = NULL,
+  gammafrailty_variance = NULL,
   exposure_causes_hazard = FALSE,
   hazard_is_transient = FALSE,
   lesion_requires_survival = FALSE,
@@ -37,8 +36,6 @@ Simulate_Cemetery(
 
 \item{age_structured}{Logical. Is the starting population age-structured, or an age cohort?}
 
-\item{pop_growth_rate}{Numeric. The population growth rate}
-
 \item{tfr}{Numeric. Total fertility rate.}
 
 \item{mortality_regime}{Data frame with Siler parameters (a1, b1, a2, a3, b3).}
@@ -56,7 +53,7 @@ with lesions. 1 = no effect, 2 = double risk. Default 1.}
 
 \item{deposition_param}{Numeric. the minimum age for including agents in the cemetery}
 
-\item{taphonomy_regime}{Not sure***}
+\item{taphonomy_regime}{A named data frame storing Siler values. Taphonomic loss, like mortality hazard, is greatest for infants and elders, so we chose to model it using a Siler function.}
 
 \item{loss_strength}{Character. describes age-dependent preservation bias (defaults to 'no_decay')}
 
@@ -65,6 +62,8 @@ with lesions. 1 = no effect, 2 = double risk. Default 1.}
 \item{yearly_updates}{Logical. If TRUE, then the model prints current year and population size at the end of each time step during the model run. Useful for assessing simulation progress, especially when timeframe, TFR, or population size are large.}
 
 \item{max_years.}{Integer. Number of years to run the simulation, given that the population doesn't crash before then.}
+
+\item{pop_growth_rate}{Numeric. The population growth rate}
 }
 \value{
 A list with two elements
