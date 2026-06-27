@@ -8,8 +8,7 @@
 #' @param age_structured Logical: is this an age-structured population? (if not, it is a single age-cohort)
 #' @param model_lesions Logical. If true, then a column for lesion presence is initialized; no one has lesions at current_time = 0. 
 #' @param lesion_formation_window Vector length 2: c(age at which window opens, age at which window closes) 
-#' @param gammafrailty_shape The alpha/shape parameter in a gamma distribution
-#' @param gammafrailty_scale The sigma/scale parameter in a gamma distribution. Together these two parameters describe the frailty distribution at birth in the starting population.
+#' @param gammafrailty_variance The sigma parameter in a gamma distribution, describing the frailty distribution at birth in the starting population (mean frailty always = 1)
 #' @param r Numeric, the population growth rate
 #' @param mortality_regime Data frame with Siler parameters (a1, b1, a2, a3, b3)
 #' @param pop_config List of population parameters
