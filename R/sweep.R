@@ -22,6 +22,7 @@ get_default_params <- function() {
     age_structured = FALSE,
     tfr            = NULL,
     mortality_regime = CoaleDemenyWestF5,
+    trauma_regime = NULL,
     
     lesion_formation_rate    = NULL,
     annual_exposure          = 0.1,
