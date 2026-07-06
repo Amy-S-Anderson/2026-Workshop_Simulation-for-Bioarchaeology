@@ -8,6 +8,7 @@ apply_mortality(
   pop,
   mu0_lookup,
   mortality_risk_type = "proportional",
+  force_death = FALSE,
   risk_factors = list(),
   current_time,
   lesion_requires_survival = FALSE,
@@ -20,25 +21,47 @@ apply_mortality(
 \arguments{
 \item{pop}{Population data frame}
 
-\item{mortality_risk_type}{One of "proportional", "time_decreasing", "time_increasing"}
+\item{mu0_lookup}{data.frame, created by defrail_siler at the top of
+Simulate_Cemetery, optionally merged with a p_trauma column via
+build_p_trauma_lookup(). Defaults to NULL, in which case there is no
+heterogeneity in individual frailty at birth. If mu0_lookup has no
+p_trauma column, or p_trauma is 0 at every age, all mortality is
+attributed to illness and no cause_of_death column is added to
+decedents (fully backward compatible behavior).}
 
-\item{risk_factors}{Named list of risk factor columns. For continuous columns
-(e.g. frailty, acquired_frailty) whose values ARE the proportional hazard,
-set the value to NULL. For binary (0/1) columns (e.g. lesion), supply the
-proportional hazard as a numeric scalar (e.g. list(lesion = 2.1)).}
+\item{mortality_risk_type}{One of "proportional", "time_decreasing",
+"time_increasing"}
+
+\item{force_death}{Logical. Defaults to FALSE. If TRUE, kill everyone at this time step.}
+
+\item{risk_factors}{Named list of risk factor columns. For continuous
+columns (e.g. frailty, acquired_frailty) whose values ARE the
+proportional hazard, set the value to NULL. For binary (0/1) columns
+(e.g. lesion), supply the proportional hazard as a numeric scalar
+(e.g. list(lesion = 2.1)). NOTE: when cause-of-death splitting is
+active (i.e. mu0_lookup$p_trauma has nonzero values), all risk_factors
+are currently applied to illness-related mortality only; trauma-related
+mortality reflects the age-based baseline hazard alone. This matches
+the intended use case (e.g. skeletal lesions raising risk of dying from
+illness/infection but not from accidents), but means risk_factors
+intended to modify trauma risk are not yet supported.}
 
 \item{current_time}{Integer, the current time step in the model}
 
-\item{m0_lookup}{data.frame, created by defrail_siler at the top of Simulate_Cemetery. Defaults to NULL, in which case there is no heterogeneity in individual frailty at birth.}
-
-\item{schedule}{Named vector of Siler parameter values. The mortality regime for baseline hazards, before being modified by individual traits/states beyond age.}
+\item{schedule}{Named vector of Siler parameter values. The mortality
+regime for baseline hazards, before being modified by individual
+traits/states beyond age.}
 }
 \value{
 Updated pop data frame
 }
 \description{
 Applies a single time step of mortality to a population of
-agents, based on age-dependent mortality hazards (defined by Siler function parameters) and, optionally,
-other sources of mortality risk (e.g., individual frailty, skeletal lesion presence, etc. )
+agents, based on age-dependent mortality hazards (defined by Siler
+function parameters) and, optionally, other sources of mortality risk
+(e.g., individual frailty, skeletal lesion presence, etc.). Optionally
+splits mortality into competing "illness" and "trauma" causes, so that
+risk factors (e.g., lesions) can be specified to affect illness-related
+mortality without affecting trauma-related mortality.
 }
 \keyword{internal}

@@ -43,29 +43,53 @@ compute_siler_survivorship <- function(ages, mortality_regime) {
 }
 
 
+
+
 #' @title Apply Mortality to Agent Population
-#' 
+#'
 #' @description Applies a single time step of mortality to a population of
-#'   agents, based on age-dependent mortality hazards (defined by Siler function parameters) and, optionally,
-#'   other sources of mortality risk (e.g., individual frailty, skeletal lesion presence, etc. )
-#' 
+#'   agents, based on age-dependent mortality hazards (defined by Siler
+#'   function parameters) and, optionally, other sources of mortality risk
+#'   (e.g., individual frailty, skeletal lesion presence, etc.). Optionally
+#'   splits mortality into competing "illness" and "trauma" causes, so that
+#'   risk factors (e.g., lesions) can be specified to affect illness-related
+#'   mortality without affecting trauma-related mortality.
+#'
 #' @param pop Population data frame
 #' @param current_time Integer, the current time step in the model
-#' @param m0_lookup data.frame, created by defrail_siler at the top of Simulate_Cemetery. Defaults to NULL, in which case there is no heterogeneity in individual frailty at birth.
-#' @param schedule Named vector of Siler parameter values. The mortality regime for baseline hazards, before being modified by individual traits/states beyond age. 
-#' @param mortality_risk_type One of "proportional", "time_decreasing", "time_increasing"
-#' @param risk_factors Named list of risk factor columns. For continuous columns
-#'   (e.g. frailty, acquired_frailty) whose values ARE the proportional hazard,
-#'   set the value to NULL. For binary (0/1) columns (e.g. lesion), supply the
-#'   proportional hazard as a numeric scalar (e.g. list(lesion = 2.1)).
+#' @param mu0_lookup data.frame, created by defrail_siler at the top of
+#'   Simulate_Cemetery, optionally merged with a p_trauma column via
+#'   build_p_trauma_lookup(). Defaults to NULL, in which case there is no
+#'   heterogeneity in individual frailty at birth. If mu0_lookup has no
+#'   p_trauma column, or p_trauma is 0 at every age, all mortality is
+#'   attributed to illness and no cause_of_death column is added to
+#'   decedents (fully backward compatible behavior).
+#' @param schedule Named vector of Siler parameter values. The mortality
+#'   regime for baseline hazards, before being modified by individual
+#'   traits/states beyond age.
+#' @param mortality_risk_type One of "proportional", "time_decreasing",
+#'   "time_increasing"
+#' @param force_death Logical. Defaults to FALSE. If TRUE, kill everyone at this time step. 
+#' @param risk_factors Named list of risk factor columns. For continuous
+#'   columns (e.g. frailty, acquired_frailty) whose values ARE the
+#'   proportional hazard, set the value to NULL. For binary (0/1) columns
+#'   (e.g. lesion), supply the proportional hazard as a numeric scalar
+#'   (e.g. list(lesion = 2.1)). NOTE: when cause-of-death splitting is
+#'   active (i.e. mu0_lookup$p_trauma has nonzero values), all risk_factors
+#'   are currently applied to illness-related mortality only; trauma-related
+#'   mortality reflects the age-based baseline hazard alone. This matches
+#'   the intended use case (e.g. skeletal lesions raising risk of dying from
+#'   illness/infection but not from accidents), but means risk_factors
+#'   intended to modify trauma risk are not yet supported.
 #' @return Updated pop data frame
 #' @keywords internal
 #' @export
 
 apply_mortality <- function(pop,
                             mu0_lookup,
-                            mortality_risk_type = "proportional",
-                            risk_factors        = list(),
+                            mortality_risk_type         = "proportional",
+                            force_death                 = FALSE,
+                            risk_factors                = list(),
                             current_time,
                             lesion_requires_survival    = FALSE,
                             exposure_causes_hazard      = FALSE,
@@ -73,19 +97,43 @@ apply_mortality <- function(pop,
                             exposure_hazard_multiplier  = 1,
                             lesion_formation_window     = NULL) {
   
+  #
   age_based_risk <- mu0_lookup$mu0[match(pop$age, mu0_lookup$age)]
+  
+  
+  # --- Competing hazards: split age-based risk into illness/trauma ---------
+  
+  # If mu0_lookup carries no p_trauma column (or it is entirely 0/NA), the
+  # split proportion is 0 everywhere, illness gets the full age-based risk,
+  # and trauma is 0. This means any lesion-related mortality risk is applied to everyone, and all-cause mortality functions as the single mortality category. 
+  # if mu0_lookup does have a p_trauma column, then use those age-specific probabilities of traumatic death (which will be unaffected by lesion-causing conditions/lesion status)
+  if ("p_trauma" %in% names(mu0_lookup)) {
+    p_trauma_by_age <- mu0_lookup$p_trauma[match(pop$age, mu0_lookup$age)]
+    p_trauma_by_age[is.na(p_trauma_by_age)] <- 0
+  } else {
+    p_trauma_by_age <- rep(0, nrow(pop))
+  }
+  # Indicate whether cause-of-death splits are being tracked in this model
+  split_active <- any(p_trauma_by_age > 0, na.rm = TRUE)
+  
+  # If they are, then calculate probability of death for: 
+  age_based_illness <- age_based_risk * (1 - p_trauma_by_age)
+  age_based_trauma  <- age_based_risk * p_trauma_by_age
+  
+  # fallback hazard multiplier = 1 (no additional hazards)
   hazard_multiplier <- 1
   
-  for (factor_name in names(risk_factors)) {
+  for (factor_name in names(risk_factors)) { # right now, risk_factors are things like 'frailty' and 'lesion'
     if (!factor_name %in% names(pop)) next
-    col <- pop[[factor_name]]
+    col <- pop[[factor_name]] # frailty value, or lesion-related risk
     col[is.na(col)] <- 1
     factor_spec <- risk_factors[[factor_name]]
     
+    # if no risk factors are present
     if (is.null(factor_spec)) {
-      hazard_multiplier <- hazard_multiplier * col
+      hazard_multiplier <- hazard_multiplier * col # still 1
     } else if (is.numeric(factor_spec) && length(factor_spec) == 1) {
-      hazard_multiplier <- hazard_multiplier * ifelse(col == 1, factor_spec, 1)
+      hazard_multiplier <- hazard_multiplier * ifelse(col == 1, factor_spec, 1) 
     } else {
       warning(sprintf("risk_factors[['%s']] must be NULL or a single numeric. Skipping.",
                       factor_name))
@@ -109,16 +157,63 @@ apply_mortality <- function(pop,
     }
   }
   
-  if(mortality_risk_type == "proportional"){
-    threshold <- 1 - exp(-age_based_risk * pop$frailty * hazard_multiplier)
-  } else if(mortality_risk_type == "time_decreasing"){
-    threshold <- 1 - exp(-age_based_risk * pop$frailty * hazard_multiplier / ((pop$age / 10) + hazard_multiplier))
-  } else if(mortality_risk_type == "time_increasing"){
-    threshold <- 1 - exp(-age_based_risk * pop$frailty * ((pop$age / 10) + hazard_multiplier) / hazard_multiplier)
+  # --- Assemble cause-specific hazards ---------------------------------
+  # risk_factors, pop$frailty, and hazard_multiplier (lesion/exposure/
+  # transient effects) modify illness-related mortality only. Trauma-related
+  # mortality reflects the age-based baseline hazard (age_based_trauma)
+  # alone, so that e.g. lesion status can raise risk of dying from illness
+  # without raising risk of dying from trauma.
+  if (mortality_risk_type == "proportional") {
+    illness_hazard <- age_based_illness * pop$frailty * hazard_multiplier
+    trauma_hazard  <- age_based_trauma
+  } else if (mortality_risk_type == "time_decreasing") {
+    illness_hazard <- age_based_illness * pop$frailty * hazard_multiplier /
+      ((pop$age / 10) + hazard_multiplier)
+    trauma_hazard  <- age_based_trauma
+  } else if (mortality_risk_type == "time_increasing") {
+    illness_hazard <- age_based_illness * pop$frailty *
+      ((pop$age / 10) + hazard_multiplier) / hazard_multiplier
+    trauma_hazard  <- age_based_trauma
+  } else {
+    stop(sprintf("Unrecognized mortality_risk_type: '%s'", mortality_risk_type))
+  }
+  
+  threshold <- 1 - exp(-(illness_hazard + trauma_hazard))
+  
+  # if force_death = TRUE, kill everyone. 
+  if (force_death) {
+    threshold <- rep(1, nrow(pop))
   }
   
   death_dice <- runif(n = nrow(pop), min = 0, max = 1)
   died <- death_dice < threshold
+  
+  # --- Assign cause of death, conditional on death ----------------------
+  # Standard competing-risks cause assignment: among those who died this
+  # step, cause is assigned with probability proportional to each agent's
+  # relative cause-specific hazard at the moment of death. This is done
+  # with a second, independent uniform draw compared against the illness/
+  # trauma hazard ratio -- NOT a second all-or-nothing dice roll per cause,
+  # which would double-count risk and inflate total mortality above
+  # `threshold`.
+  cause_of_death <- NULL
+  if (split_active) {
+    cause_of_death <- rep(NA_character_, nrow(pop))
+    if (any(died)) {
+      total_hazard_died <- illness_hazard[died] + trauma_hazard[died]
+      # Guard against 0/0 (can only occur if threshold was 0 for a death,
+      # which shouldn't happen, but default such cases to illness rather
+      # than propagating NaN)
+      p_illness_given_death <- ifelse(
+        total_hazard_died > 0,
+        illness_hazard[died] / total_hazard_died,
+        1
+      )
+      cause_dice <- runif(n = sum(died), min = 0, max = 1)
+      cause_of_death[died] <- ifelse(cause_dice < p_illness_given_death,
+                                     "illness", "trauma")
+    }
+  }
   
   # Strip step-level columns from decedents unconditionally
   decedents_this_step <- pop[died, ]
@@ -126,6 +221,9 @@ apply_mortality <- function(pop,
   if ("exposed_this_step"  %in% names(decedents_this_step)) decedents_this_step$exposed_this_step  <- NULL
   if (nrow(decedents_this_step) > 0) {
     decedents_this_step$year_died <- current_time
+    if (split_active) {
+      decedents_this_step$cause_of_death <- cause_of_death[died]
+    }
   }
   
   # Strip step-level columns from survivors, EXCEPT keep exposed_this_step
