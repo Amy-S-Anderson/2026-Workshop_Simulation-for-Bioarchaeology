@@ -41,7 +41,7 @@ create_pop <- function(pop0_size, age_structured,
       relocate(lesion, .after = age) # change position of lesion column so it sits to the right of 'age'
   }
 
-    if (!is.null(pop_config$frailty_variance) || pop_config$frailty_variance == 0){
+    if (is.null(pop_config$frailty_variance) || pop_config$frailty_variance == 0){
       # if frailty_variance = 0 or is set to NULL, everyone has a frailty value of 1.
       pop0$frailty <- 1 
     } else{
