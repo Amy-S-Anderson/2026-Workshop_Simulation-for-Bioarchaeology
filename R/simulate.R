@@ -336,6 +336,7 @@ Simulate_Cemetery <- function(# Time arguments
                  taphonomy_regime$a2, taphonomy_regime$a3,
                  taphonomy_regime$b3)
     b_siler <- demohaz::trad_to_demohaz_siler_param(a_siler)
+    # update the 'in_sample' variable to reflect individuals lost to taphonomic degradation
     decedents <- apply_preservation(decedents,
                                  preservation_model = 'siler',
                                  preservation_param = b_siler,
@@ -357,6 +358,8 @@ Simulate_Cemetery <- function(# Time arguments
   } else{ # If it is a single generation of agents, record the survivors in each year
     annual_census = rbind(starting_cohort, do.call(rbind, survivors))
   }
+  # output = individual_outcomes, essentially a simulated bioarchaeological data set, and 
+  # annual_census, the yearly record of number of living individuals (and, if a cohort and not an age-structured population and lesions are modeled in this simulation, also the number and % of individuals each year with a skeletal lesion)
   output <- list(individual_outcomes = decedents, 
                  annual_census = annual_census)
   
@@ -364,4 +367,3 @@ Simulate_Cemetery <- function(# Time arguments
 }
 
 
-### Note: columns for 'was_deposited' and 'in_sample' need to be created at the end of the ABM function. They are no longer initialized in the starting population. 
