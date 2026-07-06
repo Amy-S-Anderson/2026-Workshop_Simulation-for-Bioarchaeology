@@ -27,9 +27,7 @@ create_pop(
 
 \item{lesion_formation_window}{Vector length 2: c(age at which window opens, age at which window closes)}
 
-\item{gammafrailty_shape}{The alpha/shape parameter in a gamma distribution}
-
-\item{gammafrailty_scale}{The sigma/scale parameter in a gamma distribution. Together these two parameters describe the frailty distribution at birth in the starting population.}
+\item{gammafrailty_variance}{The sigma parameter in a gamma distribution, describing the frailty distribution at birth in the starting population (mean frailty always = 1)}
 }
 \value{
 A data frame with columns: agent_id, age, lesion, dead, in_sample
