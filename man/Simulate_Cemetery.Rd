@@ -12,6 +12,7 @@ Simulate_Cemetery(
   pop0_growth_rate = 0,
   tfr,
   mortality_regime,
+  trauma_regime = NULL,
   lesion_formation_rate = NULL,
   annual_exposure = NULL,
   lesion_formation_window = c(0, 0),
@@ -39,6 +40,8 @@ Simulate_Cemetery(
 \item{tfr}{Numeric. Total fertility rate.}
 
 \item{mortality_regime}{Data frame with Siler parameters (a1, b1, a2, a3, b3).}
+
+\item{trauma_regime}{Data frame with key ages and the proportion of deaths due to traumatic injury at these ages. Defaults to NULL (no competing hazards in the model, just all-cause mortality)}
 
 \item{lesion_formation_rate}{Numeric. Annual probability of developing a
 lesion (between 0 and 1).}
