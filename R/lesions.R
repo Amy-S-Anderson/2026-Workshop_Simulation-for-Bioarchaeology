@@ -10,19 +10,18 @@
 #' @param lesion_formation_window numeric vector of length = 2. c(Age at which lesions can start forming, Age at which lesions stop forming)
 #' @param lesion_formation_rate A probability
 #' @param annual_exposure A proportion. If lesion_formation_rate has a value then annual_exposure should be set to NULL, and vice versa. 
-#' @param exposure_causes_hazard Logical. Does exposure to lesion-causing events affect mortality hazard?
-#' @param hazard_is_transient Logical. If true, exposure-mediated change in mortality hazard last only for the year of exposure.
-#' @param exposure_hazard_multiplier Numeric. The amount to multiply an agent's mortality hazard if exposure_causes_hazard == TRUE. 
 #' @return Updated pop data frame
 #' @keywords internal
+#' 
+#' 
+### Note: Right now, form_lesions doesn't work with lesion_formation_rate, only with annual_exposure. Need to address this. 
 #' @export
+
+
 form_lesions <- function(pop,
                          lesion_formation_window,
                          lesion_formation_rate = NULL,
-                         annual_exposure = NULL,
-                         exposure_causes_hazard = FALSE,
-                         hazard_is_transient = FALSE,
-                         exposure_hazard_multiplier = 1) {
+                         annual_exposure = NULL) {
   
   # -----------------------------------------------------------------------------
   # Input validation
@@ -61,31 +60,16 @@ form_lesions <- function(pop,
   # Annual exposure framework: reads exposed_this_step written by sample_exposure()
   exposed <- pop$exposed_this_step
   
-  # Form lesions immediately (lesion_requires_survival = FALSE cases)
+  # Form lesions
   pop$lesion <- pmax(pop$lesion, as.integer(in_window & exposed), na.rm = TRUE)
   
-  # Apply hazard effects if applicable
-  if (exposure_causes_hazard) {
-    if (hazard_is_transient) {
-      # Transient: write to transient_hazard, read by apply_mortality() this step only
-      pop$transient_hazard <- ifelse(exposed, exposure_hazard_multiplier, 1)
-    } else {
-      # Permanent: accumulate into acquired_frailty
-      if ("acquired_frailty" %in% names(pop)) {
-        pop$acquired_frailty[is.na(pop$acquired_frailty)] <- 0
-        pop$acquired_frailty <- ifelse(exposed,
-                                       pop$acquired_frailty + exposure_hazard_multiplier,
-                                       pop$acquired_frailty)
-      }
-    }
-  }
+  # if(!is.null(lesion_formation_rate))
+  #   exposed <- sample(in_window, size = round(lesion_formation_rate * sum(in_window)), replace = TRUE)
+  #   pop$lesion <- pmax(pop$lesion, )
   
+  # return the updated population. 
   pop
 }
-
-
-
-
 
 
 

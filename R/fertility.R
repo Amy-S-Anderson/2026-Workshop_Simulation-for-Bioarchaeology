@@ -70,16 +70,18 @@ generate_births <- function(pop, current_time, n_births, pop_config) {
   
   max_id <- max(pop$agent_id)
   
+  # data frame with minimum columns.
   new_agents <- data.frame(
     agent_id = seq(max_id + 1, max_id + n_births),
     age      = 0,
     year_born = current_time
   )
   
-  if (pop_config$model_lesions) {
+  # check for optional columns; initialize if present:
+  if ("lesion" %in% names(pop)) {
     new_agents$lesion <- 0
   }
-  if (pop_config$model_frailty) {
+  if ("frailty" %in% names(pop)) {
     new_agents$frailty          <- rgamma(n_births,
                                                        shape = 1 / pop_config$frailty_variance, # this holds mean at 1 for all values of variance. 
                                                        scale = pop_config$frailty_variance)
@@ -90,6 +92,7 @@ generate_births <- function(pop, current_time, n_births, pop_config) {
   
   if ("n_stress_events" %in% names(pop)) {
     new_agents$n_stress_events <- 0L
+    new_agents$exposed_this_step <- FALSE
   }
   
   new_agents[, names(pop), drop = FALSE]
@@ -98,9 +101,9 @@ generate_births <- function(pop, current_time, n_births, pop_config) {
 
 
 
-#' Apply fertility to the living population for one timestep
+#' Apply fertility to the living population for one time step
 #'
-#' Determines how many births occur this timestep and appends new agents to
+#' Determines how many births occur this time step and appends new agents to
 #' the cohort. The number of births is drawn from a Poisson distribution whose
 #' rate equals the sum of age-specific fertility rates across all reproductive-
 #' age women in the living population.

@@ -9,6 +9,8 @@
 #' @keywords internal
 
 record_cohort_survivors <- function(pop, current_time, model_lesions) {
+  if(nrow(pop) > 0){
+    
   
   survivors <- data.frame(Time = current_time,
                           Age = unique(pop$age), 
@@ -17,6 +19,7 @@ record_cohort_survivors <- function(pop, current_time, model_lesions) {
     survivors$Lesion = sum(pop$lesion, na.rm = TRUE)
     survivors$Lesion_perc = round((sum(pop$lesion, na.rm = TRUE) / nrow(pop)) * 100, 1)
   }
+ }
   survivors
 }
 

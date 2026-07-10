@@ -114,8 +114,8 @@ apply_mortality <- function(pop,
     p_trauma_by_age <- rep(0, nrow(pop))
   }
   # Indicate whether cause-of-death splits are being tracked in this model
-  split_active <- any(p_trauma_by_age > 0, na.rm = TRUE)
-  
+  split_active <- "p_trauma" %in% names(mu0_lookup) && any(mu0_lookup$p_trauma > 0, na.rm = TRUE)
+
   # If they are, then calculate probability of death for: 
   age_based_illness <- age_based_risk * (1 - p_trauma_by_age)
   age_based_trauma  <- age_based_risk * p_trauma_by_age

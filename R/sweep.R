@@ -17,22 +17,21 @@ load('data/CoaleDemenyWestF5.rda')
 get_default_params <- function() {
   list(
     dx             = 1,
-    max_years      = 100,
+    max_years      = 1000,
     pop0_size      = 1000,
     age_structured = FALSE,
     tfr            = NULL,
     mortality_regime = CoaleDemenyWestF5,
-    trauma_regime = NULL,
+    trauma_regime = data.frame(age = 0, p_trauma = 0),
     
     lesion_formation_rate    = NULL,
-    annual_exposure          = 0.1,
-    lesion_formation_window  = c(0, 6),
+    annual_exposure          = NULL,
+    lesion_formation_window  = c(0, 0),
     mortality_risk_type      = "proportional",
     lesion_related_hazard    = 1,
     
     gammafrailty_variance = NULL,
 
-    exposure_causes_hazard     = FALSE,
     hazard_is_transient        = FALSE,
     lesion_requires_survival   = FALSE,
     exposure_hazard_multiplier = 1,

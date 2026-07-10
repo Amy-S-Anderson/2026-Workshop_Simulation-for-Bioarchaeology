@@ -85,13 +85,13 @@ Simulate_Cemetery <- function(# Time arguments
                               annual_exposure = NULL,
                               lesion_formation_window = c(0,0), 
                               mortality_risk_type = "proportional",
-                              lesion_related_hazard = 1, # This is only called if lesion modifies mortality hazard directly
+                              lesion_related_hazard = 1, # This is only called if lesion modifies mortality hazard directly. I think this should be removed, since exposure itself is the thing that causes the hazard. The lesion is only an indicator of exposure to lesion-causing conditions. 
 
                               # Frailty arguments
                               gammafrailty_variance = NULL,
+                              
 
                               # Exposure-lesion-hazard relationships
-                              exposure_causes_hazard   = FALSE,  # does exposure to lesion-causing events modify mortality?
                               hazard_is_transient      = FALSE,  # TRUE = year of exposure only, FALSE = permanent
                               lesion_requires_survival = FALSE,  # TRUE = agent must survive exposure year
                               exposure_hazard_multiplier = 1,    # the 'stress value' or acquired frailty that results from exposure to lesion-causing conditions. 
@@ -105,29 +105,27 @@ Simulate_Cemetery <- function(# Time arguments
                               # real-time update messages arguments
                               yearly_updates = FALSE) {
   
-  # check: return message if user chooses nonsensical combination of argument values.
+  # Check Input: return message if user chooses nonsensical combination of argument values.
   if (!is.null(lesion_formation_rate) && lesion_formation_window[2] == 0) {
     warning("lesion_formation_rate is set but formation window closes at 0: no lesions will form.")
   }
   if(is.numeric(tfr) && age_structured == FALSE){
     warning("fertility only works for an age-structured population. Either run a cohort with age_structured = FALSE and tfr = NULL, or run an age-structured population with age_structured = TRUE and tfr = a numeric value (0-12). Note that run time may be slow if tfr is large, especially if pop0_size and max_years are also on the high end for archaeological contexts.")
   }
+  if(is.null(tfr) && age_structured == TRUE){
+    warning("You are modeling an age-structured population but have not entered a fertility rate for the tfr argument. Please choose a numeric value for tfr, or change age_structured from TRUE to FALSE to model an age cohort.")
+  }
   
   # Logical: Does this simulation include skeletal lesion formation?
   model_lesions <- !is.null(lesion_formation_rate) | !is.null(annual_exposure)
-  model_frailty <- !is.null(gammafrailty_variance)
-  
+  # Logical: Does this simulation include heterogeneous frailty as a stable characteristic of agents, assigned at birth?
+
   # Hold population configuration parameters here for ease of reference in functions that follow. 
   pop_config <- list(
     model_lesions              = model_lesions,
     annual_exposure            = annual_exposure,
-    model_frailty              = model_frailty,
-    frailty_variance           = gammafrailty_variance,
-    lesion_formation_window    = lesion_formation_window,
-    exposure_causes_hazard     = exposure_causes_hazard,
-    hazard_is_transient        = hazard_is_transient,
-    lesion_requires_survival   = lesion_requires_survival,
-    exposure_hazard_multiplier = exposure_hazard_multiplier
+    lesion_formation_window.   = lesion_formation_window,
+    frailty_variance           = gammafrailty_variance
   )
   
   #--------------------------------------------------------------------
@@ -146,16 +144,19 @@ Simulate_Cemetery <- function(# Time arguments
 
   # Calculate age-specific mortality hazards across individual frailty values by 'defrailing' the Siler function, which gives average mortality hazard at each age. 
   mu0_table <- if (!is.null(pop_config$frailty_variance) && pop_config$frailty_variance > 0) {
+    # If there is variance in assigned frailty values at birth, defrail the Siler values.
     defrail_siler(mortality_regime = params$mortality_regime,
                   frailty_variance  = pop_config$frailty_variance)
   } else {
+    # Otherwise, use the Siler function directly to calculate age-based mortality hazards for ages 0 to 110. 
     ages <- 0:110
     data.frame(
       age = ages,
       mu0 = compute_siler_risk(ages, params$mortality_regime)
     )
   }
-  # Add a column to the lookup table detailing the proportion of deaths at each age due to trauma (rather than illness)
+  # Add a column to the age-based hazards lookup table detailing the proportion of deaths at each age due to trauma.
+  # This column incorporates life history differences in relative risk of dying from illness/natural causes vs. accidental/traumatic causes
   mu0_table <- build_p_trauma_lookup(mu0_lookup = mu0_table, control_points = trauma_regime)
   
   
@@ -174,21 +175,32 @@ Simulate_Cemetery <- function(# Time arguments
   # Time begins!
   #--------------------------------------------------------------------
   # As long as people are alive
-  while (nrow(pop) > 0) {
+  while (nrow(pop) > 0){
     # exit the loop when current_time is greater than max_years, or when the population drops to <=10 people. 
-    force_death <- nrow(pop) <= 10  | (!is.null(tfr) && current_time > max_years) # max_years should only be checked  in a dynamic population, where TFR is specified and new agents are born into the model each year.
+    if(current_time >= max_years) break
+    # if <=10 people are alive, they will all die this time step. This truncation decision is based on the poor precision/accuracy of skeletal age-at-death estimates at old ages, and to prevent a stochastic model from producing an age outlier; bioarchaeologically we wouldn't be able to see Methuselah.
+    force_death <- nrow(pop) <= 10  
     
-    
-    # Sample exposure first, so both form_lesions() and apply_mortality() can read it.
-    # Determine who has experienced a 'stress' event in this time step. Flag them, and update their stress event count. 
-    if (!is.null(annual_exposure)) {
-      pop <- sample_exposure(pop, annual_exposure) # pop now has columns 'exposed_this_step' and 'n_stress_events'
+    if(hazard_is_transient && "acquired_frailty" %in% names(pop)){ ### is this the right way to do a dual if statement? Maybe check your book on R code for if conditionals. 
+      # re-set the value for acquired frailty back to baseline if hazard is transient. 
+      pop$acquired_frailty <- NA_real_
     }
     
+    # Sample agent exposure (to unspecified (stress?) event) first, so both form_lesions() and apply_mortality() can read it.
+    # Determine who has experienced a 'stress' event in this time step. Flag them, and update their stress event count. 
+    if (!is.null(annual_exposure)) {
+      pop <- sample_exposure(pop, annual_exposure) 
+      # pop now has columns 'exposed_this_step' and 'n_stress_events'. 
+      # n_stress_events already includes the current stress event in its total n. 
+    }
+    
+   
     # If lesions are modeled in this simulation, then:
     if(model_lesions) {
+      
     # Lesion formation timing is an open question that introduces an order-of-operations issue:
-    # Option 1: Lesions require a period of survival in order to form. Apply mortality first, then form lesions among survivors. 
+      # **Option 1: Lesions require a period of survival in order to form.** 
+      # Apply mortality first, then form lesions among survivors. 
     if (lesion_requires_survival) {
       # Mortality first; lesion forms only for survivors
       updated_pop <- apply_mortality(pop,
@@ -197,62 +209,67 @@ Simulate_Cemetery <- function(# Time arguments
                                      force_death = force_death, # TRUE if 10 or fewer people are left alive in this time step. 
                                      current_time            = current_time,
                                      risk_factors            = list(
-                                       frailty = NULL,
-                                       acquired_frailty = NULL,
-                                       lesion = lesion_related_hazard),
-                                     lesion_requires_survival   = lesion_requires_survival,
-                                     exposure_causes_hazard     = exposure_causes_hazard,
-                                     hazard_is_transient        = hazard_is_transient,
-                                     exposure_hazard_multiplier = exposure_hazard_multiplier)
+                                       frailty = NULL, # NULL here means that the actual value in the column 'frailty' will be used as a hazard multiplier. 
+                                       acquired_frailty = NULL), 
+                                     exposure_hazard_multiplier = exposure_hazard_multiplier) # a scalar.
       
       decedents[[current_time]] <- updated_pop$decedents
       pop <- updated_pop$pop
+      # Now apply lesion formation to survivors. 
       pop <- form_lesions(pop,
                             lesion_formation_window,
                             lesion_formation_rate,
-                            annual_exposure,
-                            exposure_causes_hazard     = exposure_causes_hazard,
-                            hazard_is_transient        = hazard_is_transient,
-                            exposure_hazard_multiplier = exposure_hazard_multiplier)
-      
-      pop$exposed_this_step <- NULL  # <-- re-set the values for immediate hazards here, after form_lesions() is done
-      pop$transient_hazard  <- NULL  
-    } else {
-      # Option 2: Lesions don't require a period of survival after the lesion-causing event. Lesions form immediately, then mortality is calculated. 
-        pop <- form_lesions(pop,
-                            lesion_formation_window,
-                            lesion_formation_rate,
-                            annual_exposure,
-                            exposure_causes_hazard     = exposure_causes_hazard,
-                            hazard_is_transient        = hazard_is_transient,
-                            exposure_hazard_multiplier = exposure_hazard_multiplier)
+                            annual_exposure)
+      }
+    
+     else { # Lesion does not require a period of survival.
+       
+      # **Option 2:Lesions form immediately.** 
+      # Form lesions.
+      pop <- form_lesions(pop,
+                          lesion_formation_window,
+                          lesion_formation_rate,
+                          annual_exposure)
+      # Then apply mortality (below).
+     }
     }
-  }
-      
+      # If lesions are not being modeled in this simulation, then skip lesion formation.
+      # Jump straight to mortality.
       updated_pop <- apply_mortality(pop,
                                      mu0_lookup = mu0_table,
                                      mortality_risk_type,
-                                     force_death = force_death, # TRUE if 10 or fewer people are left alive in this time step. 
-                                     current_time = current_time,
-                                     risk_factors = list(frailty          = NULL,
-                                                         acquired_frailty = NULL,
-                                                         lesion           = lesion_related_hazard))
-      
+                                     force_death = force_death, 
+                                     current_time            = current_time,
+                                     risk_factors            = list(
+                                       frailty = NULL, 
+                                       acquired_frailty = NULL), 
+                                     exposure_hazard_multiplier = exposure_hazard_multiplier) 
+                                     
+      # and update the bookkeeping of the living and the dead. 
       decedents[[current_time]] <- updated_pop$decedents
       pop <- updated_pop$pop
-    }
     
+    
+    # If this is a dynamic population with a specified TFR for fertility, then apply fertility.
+    # i.e., calculate new births and generate new agents.
     if (age_structured == TRUE & !is.null(tfr) && nrow(pop) > 0) {
       pop <- apply_fertility(pop, tfr = tfr, asfr = asfr, time = current_time, dx = dx, pop_config)
     }
-    
+      
+    # Happy New Year!
     current_time <- current_time + 1
-    pop <- age_pop(pop)
-   # cat("Time:", current_time, "| nrow:", nrow(pop), "| age col exists:", "age" %in% names(pop), "| unique ages:", length(unique(pop$age)), "\n")
     
-    if (age_structured == FALSE) {
+    # Happy Birthday!
+    pop <- age_pop(pop)
+    
+    # If this is an age cohort, no fertility is in play. 
+    # Record the time step/agent age (equivalent), and how many agents have survived this year.
+    # Also record how many surviving agents have lesions, if lesions are being modeled in this simulation.
+    if (age_structured == FALSE && nrow(pop) > 0) {
       survivors[[current_time]] <- record_cohort_survivors(pop, current_time, model_lesions)
     } else {
+    # Or, if this is a dynamic population, record the year/time step, and the number of agents alive at this time step.
+    # Do not record lesion counts, since lesion counts are sensitive to population age structure, and the number is not easily interpretable. 
       pop_size[[current_time]] <- data.frame(Time = current_time, n = nrow(pop))
     }
     if(yearly_updates){
@@ -260,27 +277,26 @@ Simulate_Cemetery <- function(# Time arguments
       print(paste0("Pop_size = ", nrow(pop)))
     }
   }
-  # If this is a single-generation model (tfr = NULL, no agents born into the simulation), then When the population drops to <= 10 people, they all enter the cemetery.
-  if(nrow(pop) > 0){
-  # This truncation decision is based on the poor precision/accuracy of skeletal age-at-death estimates at old ages, and to prevent a stochastic model from producing an age outlier; bioarchaeologically we wouldn't be able to see Methuselah. 
-    pop <- age_pop(pop) 
-    decedents[[current_time]] <- pop
-    decedents[[current_time]]$year_died <- current_time 
-  }
- 
-  # Transform decedents from a list of data frames to a single data frame
-  decedents <- do.call(rbind, decedents) 
   
-  # Add post-mortem processes to all decedents:
+  
+  # Compile the Cemetery: Transform decedents from a list of data frames to a single data frame
+  decedents <- do.call(rbind, decedents)
+
+  #--------------------------------------------------------------------
+  # Post-mortem Processes
+  #--------------------------------------------------------------------
+
   # Apply deposition bias (if any)
+  # This is a way to operationalize a common mortuary behavior; the youngest individuals are often buried in homes or places other than the cemetery where most others are buried.
   decedents <- apply_deposition(decedents,
                              deposition_model = 'cutoff',
                              deposition_param = deposition_param,
                              dx = 1)
-  
+  # create 'in_sample' variable. Populate with TRUE values for individuals who were deposited in the cemetery.
   decedents$in_sample <- decedents$was_deposited
 
   # Apply preservation bias (if any)
+  # The youngest and oldest individuals are less well preserved, so we can model preservation bias using a Siler function, like mortality hazard.
   if (loss_strength != 'no_decay') {
     a_siler <- c(taphonomy_regime$a1, taphonomy_regime$b1,
                  taphonomy_regime$a2, taphonomy_regime$a3,
@@ -292,24 +308,29 @@ Simulate_Cemetery <- function(# Time arguments
                                  preservation_param = b_siler,
                                  dx = 1)
   }
-  
+
   # Apply age misestimation (if any)
-  if (age_noise) decedents <- apply_estimation_error(decedents)
+  if (age_noise) {
+    decedents <- apply_estimation_error(decedents)
+  }
+
   
-  
-  # Model output
+  # Organize model output
     if(model_lesions){
       starting_cohort <- c("Time" = 1, "Age" = 0, "n" = pop0_size, "Lesion" = 0, "Lesion_perc" = 0.0)
     } else{
       starting_cohort <- c("Time" = 1, "Age" = 0, "n" = pop0_size)
     }
-  if(!is.null(tfr)){ # If it is a dynamic population, record its size each year
+  if(!is.null(tfr)){ 
+    # If it is a dynamic population, record its size each year.
     annual_census = do.call(rbind, pop_size)
-  } else{ # If it is a single generation of agents, record the survivors in each year
+  } else{ 
+    # If it is a single generation of agents, record the survivors in each year.
     annual_census = rbind(starting_cohort, do.call(rbind, survivors))
   }
-  # output = individual_outcomes, essentially a simulated bioarchaeological data set, and 
-  # annual_census, the yearly record of number of living individuals (and, if a cohort and not an age-structured population and lesions are modeled in this simulation, also the number and % of individuals each year with a skeletal lesion)
+  # Output:
+  # 1. individual_outcomes, a simulated bioarchaeological data set 
+  # 2. annual_census, the yearly record of number of living individuals
   output <- list(individual_outcomes = decedents, 
                  annual_census = annual_census)
   

@@ -19,6 +19,14 @@ sample_exposure <- function(pop, annual_exposure) {
     stop("annual_exposure is the proportion of the population exposed each time step, and must be between 0 and 1")
   }
   
+  
+  # ---------------------------------------------------------------------------
+  # All agents are still unexposed
+  # ---------------------------------------------------------------------------
+  
+  # No one has been exposed yet. After the first time step, this will overwrite exposed_this_step values from the previous time step, so that the output of sample_exposure returns true values for exposure status in the current time step. 
+  pop$exposed_this_step <- rep(FALSE, size = nrow(pop))
+  
   # ---------------------------------------------------------------------------
   # Identify exposed agents
   # ---------------------------------------------------------------------------

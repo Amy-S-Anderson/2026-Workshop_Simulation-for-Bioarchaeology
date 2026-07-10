@@ -19,7 +19,6 @@ Simulate_Cemetery(
   mortality_risk_type = "proportional",
   lesion_related_hazard = 1,
   gammafrailty_variance = NULL,
-  exposure_causes_hazard = FALSE,
   hazard_is_transient = FALSE,
   lesion_requires_survival = FALSE,
   exposure_hazard_multiplier = 1,

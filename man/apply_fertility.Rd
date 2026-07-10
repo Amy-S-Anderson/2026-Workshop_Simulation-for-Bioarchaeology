@@ -2,7 +2,7 @@
 % Please edit documentation in R/fertility.R
 \name{apply_fertility}
 \alias{apply_fertility}
-\title{Apply fertility to the living population for one timestep}
+\title{Apply fertility to the living population for one time step}
 \usage{
 apply_fertility(pop, tfr, asfr, dx = 1, time, config = pop_config)
 }
@@ -26,7 +26,7 @@ Default 1 (annual timestep).}
 Updated pop data frame with new agents appended
 }
 \description{
-Determines how many births occur this timestep and appends new agents to
+Determines how many births occur this time step and appends new agents to
 the cohort. The number of births is drawn from a Poisson distribution whose
 rate equals the sum of age-specific fertility rates across all reproductive-
 age women in the living population.

@@ -8,10 +8,7 @@ form_lesions(
   pop,
   lesion_formation_window,
   lesion_formation_rate = NULL,
-  annual_exposure = NULL,
-  exposure_causes_hazard = FALSE,
-  hazard_is_transient = FALSE,
-  exposure_hazard_multiplier = 1
+  annual_exposure = NULL
 )
 }
 \arguments{
@@ -22,12 +19,6 @@ form_lesions(
 \item{lesion_formation_rate}{A probability}
 
 \item{annual_exposure}{A proportion. If lesion_formation_rate has a value then annual_exposure should be set to NULL, and vice versa.}
-
-\item{exposure_causes_hazard}{Logical. Does exposure to lesion-causing events affect mortality hazard?}
-
-\item{hazard_is_transient}{Logical. If true, exposure-mediated change in mortality hazard last only for the year of exposure.}
-
-\item{exposure_hazard_multiplier}{Numeric. The amount to multiply an agent's mortality hazard if exposure_causes_hazard == TRUE.}
 }
 \value{
 Updated pop data frame

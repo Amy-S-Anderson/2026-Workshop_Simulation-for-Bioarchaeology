@@ -41,16 +41,18 @@ create_pop <- function(pop0_size, age_structured,
       relocate(lesion, .after = age) # change position of lesion column so it sits to the right of 'age'
   }
 
-    if (is.null(pop_config$frailty_variance) || pop_config$frailty_variance == 0){
+  # If frailty has a numeric value, initialize an 'acquired_frailty' column and a gamma distribution of
+  # frailty values in a 'frailty' column. 
+  if(!is.null(pop_config$frailty_variance)){
+    pop0$acquired_frailty <- NA_real_
+    
+    if (pop_config$frailty_variance == 0){
       # if frailty_variance = 0 or is set to NULL, everyone has a frailty value of 1.
       pop0$frailty <- 1 
     } else{
       pop0$frailty <- rgamma(pop0_size,
                              shape = 1 / pop_config$frailty_variance, # this holds mean at 1 for all values of variance. 
                              scale = pop_config$frailty_variance)    }
-  
-  if(pop_config$model_frailty){
-    pop0$acquired_frailty <- NA_real_
   }
 
   if (!is.null(pop_config$annual_exposure)) {
