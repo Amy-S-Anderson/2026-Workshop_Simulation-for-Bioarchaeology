@@ -92,7 +92,18 @@ generate_births <- function(pop, current_time, n_births, pop_config) {
   
   if ("n_stress_events" %in% names(pop)) {
     new_agents$n_stress_events <- 0L
-    new_agents$exposed_this_step <- FALSE
+  }
+  
+  if("exposed_this_step" %in% names(pop)){
+    new_agents$exposed_this_step <- rep(FALSE, n_births)
+  }
+  
+  if (!setequal(names(pop), names(new_agents))) {
+    stop(
+      "Column mismatch between pop and new_agents.\n",
+      "  In pop but not new_agents: ", paste(setdiff(names(pop), names(new_agents)), collapse = ", "), "\n",
+      "  In new_agents but not pop: ", paste(setdiff(names(new_agents), names(pop)), collapse = ", ")
+    )
   }
   
   new_agents[, names(pop), drop = FALSE]

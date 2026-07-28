@@ -188,10 +188,11 @@ Simulate_Cemetery <- function(# Time arguments
     
     # Sample agent exposure (to unspecified (stress?) event) first, so both form_lesions() and apply_mortality() can read it.
     # Determine who has experienced a 'stress' event in this time step. Flag them, and update their stress event count. 
-    if (!is.null(annual_exposure)) {
-      pop <- sample_exposure(pop, annual_exposure) 
+    if (!is.null(annual_exposure) || !is.null(lesion_formation_rate)) {
+      pop <- sample_exposure(pop, annual_exposure, lesion_formation_rate, lesion_formation_window) 
       # pop now has columns 'exposed_this_step' and 'n_stress_events'. 
       # n_stress_events already includes the current stress event in its total n. 
+     # cat("year:", current_time, " n:", nrow(pop), " age range:", range(pop$age), "\n")
     }
     
    

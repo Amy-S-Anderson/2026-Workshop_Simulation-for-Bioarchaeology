@@ -4,7 +4,12 @@
 \alias{sample_exposure}
 \title{Sample which agents are exposed to lesion-causing conditions this time step}
 \usage{
-sample_exposure(pop, annual_exposure)
+sample_exposure(
+  pop,
+  annual_exposure,
+  lesion_formation_rate,
+  lesion_formation_window
+)
 }
 \arguments{
 \item{pop}{Population data frame}

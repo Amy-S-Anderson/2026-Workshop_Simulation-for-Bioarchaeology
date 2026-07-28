@@ -55,7 +55,7 @@ create_pop <- function(pop0_size, age_structured,
                              scale = pop_config$frailty_variance)    }
   }
 
-  if (!is.null(pop_config$annual_exposure)) {
+  if (!is.null(pop_config$annual_exposure) || !is.null(pop_config$lesion_formation_rate)) {
     pop0$n_stress_events <- 0L
   }
   return(pop0)

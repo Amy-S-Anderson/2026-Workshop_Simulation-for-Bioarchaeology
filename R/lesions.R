@@ -51,24 +51,22 @@ form_lesions <- function(pop,
     stop("formation_window_closes must be >= formation_window_opens")
   }
   
+  # -----------------------------------------------------------------------------
+  # Identify agents at risk of forming lesions
+  # -----------------------------------------------------------------------------
   
   # Identify agents whose ages fall within the range of the lesion formation window. 
   in_window <- pop$age >= lesion_formation_window[1] &
     pop$age <= lesion_formation_window[2]
   
-  if(!is.null(annual_exposure))
-  # Annual exposure framework: reads exposed_this_step written by sample_exposure()
-  exposed <- pop$exposed_this_step
-  
-  # Form lesions
-  pop$lesion <- pmax(pop$lesion, as.integer(in_window & exposed), na.rm = TRUE)
-  
-  # if(!is.null(lesion_formation_rate))
-  #   exposed <- sample(in_window, size = round(lesion_formation_rate * sum(in_window)), replace = TRUE)
-  #   pop$lesion <- pmax(pop$lesion, )
-  
-  # return the updated population. 
-  pop
+  # exposed_this_step was calculated in sample_exposure()
+    exposed <- pop$exposed_this_step
+    
+    # Form lesions
+    pop$lesion <- pmax(pop$lesion, as.integer(in_window & exposed), na.rm = TRUE)
+     
+     # return the updated population. 
+   pop
 }
 
 
