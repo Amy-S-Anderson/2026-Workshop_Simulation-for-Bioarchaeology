@@ -1,0 +1,139 @@
+---
+title: "development to-do list"
+format: html
+editor: visual
+---
+
+## 
+
+- *In progress*: Integrating frailty under the Siler function.
+  - new function: defrail_siler
+  - create_pop now operates with only gamma variance, holding shape at 1
+  - apply_mortality references a hazard lookup table matching frailty values and individual age-specific hazard.
+  - ***Current Challenge***: in apply_mortality, 'object hazard_multiplier' not found. Not sure why.
+- Write a working test for form_lesions(). Will require adding logical boundaries to the form_lesions() expectations for arguments.
+- Built a burn-in for an age-structured population that emerges from mortality and fertility dynamics.
+
+*Notes from Claude:* A burn-in is more principled when the *dynamics* matter, not just the end state. A reasonable burn-in length is roughly 2–3 times the life expectancy under your mortality regime, which gives the age structure time to stabilize from whatever arbitrary starting point you choose. For most bioarchaeologically-relevant Siler regimes that's on the order of 60–120 years. The cost is computational; the benefit is that the age structure at the start of your "real" simulation window genuinely emerges from the demographic processes you've specified rather than being imposed.
+
+My recommendation: implement the analytical initialization as a default (it's fast and sufficient for most questions about skeletal lesion prevalence), but build the burn-in as an option. The two approaches should give the same results under stationary conditions, which itself makes a useful internal validation test.
+
+- Fertility
+
+**How to operationalize fertility**
+
+*Notes from Claude*: Your instinct to assign a Total Fertility Rate (TFR) and derive births from the female population is the right individual-oriented approach, and it maps well to how demographers think about natural fertility populations. The TFR doesn't require you to specify birth spacing explicitly to get the annual birth count — you can convert it to an annual age-specific fertility rate (ASFR) using a standard schedule (e.g. Coale-Trussell model fertility schedules, or a simple trapezoid over ages 15–45), multiply by the number of living women at each age, and draw births as a Poisson or Bernoulli process.
+
+The 50% female assumption is fine as a default. The important thing is that it stays an assumption you can relax later — which it will, if sex becomes a column in the cohort data frame. That's exactly the kind of individual-level attribute that slots naturally into your vectorized framework: you'd filter Alive to Alive\[cohort\$sex\[Alive\] == "F"\] before applying fertility rolls, just as you already filter by age window for lesion formation.
+
+You do not need explicit birth spacing for population-level birth counts, but you will if you ever want to model birth intervals as a physiological constraint on individual women (e.g. post-partum amenorrhea, competing mortality risk of repeated pregnancy). Deferring that is sensible.
+
+- **Frailty**
+
+**Problem**: Need to integrate stable frailty values for individual agents so that the aggregate baseline frailty – before incorporating life experiences – is the Siler model, not a stretched version of the siler model with set frailties distorting what the population-level pattern ought to be.
+
+**Solution**: 'defrail' the Siler hazards and create a lookup table of age-specific mortality hazards for each individual frailty value.
+
+*Notes from Claude*:
+
+Show more
+
+8:59 AM
+
+
+
+
+
+## Claude responded: This is a really clean conceptual problem.
+
+This is a really clean conceptual problem. You're right that there's a double-counting issue: if the Siler parameters were fit to observed mortality data from a real population, that population already *had* a frailty distribution baked into it. Applying individual frailty on top of the Siler hazard treats the Siler curve as if it described a homogeneous population, which it doesn't — it describes the *aggregate outcome* of a heterogeneous one.
+
+Here's how I'd think about the fix:
+
+------------------------------------------------------------------------
+
+### The core idea: frailty as a re-parameterisation of Siler, not a multiplier
+
+The standard frailty model (Vaupel et al. 1979) says that observed population-level mortality is the *mixture* of individual hazards weighted by the frailty distribution. If individual hazard is:
+
+μ(a∣z)=z⋅μ0(a)\mu(a \mid z) = z \cdot \mu\_0(a)μ(a∣z)=z⋅μ0​(a)
+
+and frailty zz z follows a Gamma(k,k)(k, k) (k,k) distribution (mean 1, variance 1/k1/k 1/k), then the *observed* aggregate hazard is a specific function of μ0(a)\mu\_0(a) μ0​(a) and kk k. Your Siler values already reflect this aggregate — so what you actually want is to *invert* that relationship to recover μ0(a)\mu\_0(a) μ0​(a), the hazard of an agent with frailty z=1z = 1 z=1.
+
+In practice this means:
+
+**At initialisation**, when you assign each agent a stable frailty value ziz_i zi​ drawn from your frailty distribution, their personal baseline hazard should be:
+
+μi(a)=zi⋅μ0(a)\mu\_i(a) = z_i \cdot \mu\_0(a)μi​(a)=zi​⋅μ0​(a)
+
+where μ0(a)\mu\_0(a) μ0​(a) is the *defrailted* Siler hazard, not the observed one. The observed Siler curve is then an emergent property of the simulated population, not an input applied to every agent equally.
+
+------------------------------------------------------------------------
+
+### Practical steps for persephone
+
+**1. Defrailting the Siler parameters**
+
+Given a Gamma frailty distribution with mean 1 and variance σz2\sigma\^2_z σz2​ (i.e., shape k=1/σz2k = 1/\sigma\^2_z k=1/σz2​), the relationship between the observed aggregate hazard μˉ(a)\bar{\mu}(a) μˉ​(a) and the individual baseline μ0(a)\mu\_0(a) μ0​(a) is:
+
+μˉ(a)=μ0(a)1+σz2⋅H0(a)\bar{\mu}(a) = \frac{\mu_0(a)}{1 + \sigma^2_z \cdot H_0(a)}μˉ​(a)=1+σz2​⋅H0​(a)μ0​(a)​
+
+where H0(a)=∫0aμ0(t) dtH_0(a) = \int\_0\^a \mu\_0(t),dt H0​(a)=∫0a​μ0​(t)dt is the cumulative baseline hazard. This doesn't have a closed-form inversion for Siler, but you can solve it numerically once at model initialisation — integrate forward, invert, and store the defrailted Siler parameters (or a lookup table of μ0(a)\mu\_0(a) μ0​(a) by age).
+
+If you want to keep things simpler and avoid the numerical inversion, a reasonable approximation for moderate frailty variance is just to scale the Siler b2b_2 b2​ (the Gompertz senescent component) downward, since frailty selection primarily acts on that component at older ages.
+
+**2. Agent initialisation**
+
+Assign zi∼Gamma(k,k)z_i \sim \text{Gamma}(k, k) zi​∼Gamma(k,k) at birth. Store this as the stable frailty component. Apply μi(a)=zi⋅μ0(a)\mu\_i(a) = z_i \cdot \mu\_0(a) μi​(a)=zi​⋅μ0​(a) when computing mortality risk each step — so stable frailty enters through the baseline, not as an additional multiplier on top of it.
+
+**3. Acquired frailty stays as a multiplier**
+
+Acquired frailty is conceptually different — it represents deviations from an agent's own trajectory caused by life events, not the pre-existing population variance the Siler was fit to. So keeping acquired frailty as a post-baseline multiplier (μi(a)⋅(1+facquired)\mu*i(a)\* \cdot (1 + f{\text{acquired}}) μi​(a)⋅(1+facquired​) or similar) is correct.
+
+**4. Validation check**
+
+After making the change, the aggregate mortality curve across your simulated population should approximately reproduce the original Siler curve (at the same frailty variance you used for defrailting). That's a useful sanity check — if it does, you've correctly decomposed the observed hazard into its individual-level components.
+
+------------------------------------------------------------------------
+
+### What you gain
+
+- 
+
+- Agents' lifespans will be bounded more realistically because high-frailty agents die early (as they do in real populations), and even low-frailty agents are working from a defrailted baseline that's steeper than the observed one at old ages.
+
+- 
+
+- The Siler curve becomes a *model output* you can validate rather than an assumption applied identically to everyone.
+
+- 
+
+- Acquired frailty retains a clear, separable interpretation.
+
+- 
+
+The trickiest part is the numerical defrailting step — happy to help work through that in R if you want to implement it concretely.
+
+
+
+
+
+## You said: Yes please, I would like help writing the R code to defrail the Siler parameters that are fed into the model as an argument.
+
+Yes please, I would like help writing the R code to defrail the Siler parameters that are fed into the model as an argument.
+
+9:06 AM
+
+
+
+
+
+## Claude responded: Let's work through this carefully.
+
+Let's work through this carefully. First let me make sure I understand the Siler hazard structure you're using — the standard form is:
+
+μ0(a)=α1e−β1a+α2+α3eβ3a\mu\_0(a) = \alpha\_1 e\^{-\beta\_1 a} + \alpha\_2 + \alpha\_3 e\^{\beta\_3 a}μ0​(a)=α1​e−β1​a+α2​+α3​eβ3​a
+
+(infant, constant, and senescent components). Can you confirm that's the parameterisation persephone uses, and what the argument structure looks like — e.g. is it a named vector like `c(a1, b1, a2, b2, a3, b3)`, a list, or something else? That'll let me write code that plugs straight into your existing interface rather than needing adaptation.
+
+Since the Gamma distribution has mean = shape × scale, fixing the mean to 1 means scale = 1/shape. So the only free parameter is shape (which equals k=1/σz2k = 1/\sigma\^2_z k=1/σz2​), and you can derive it directly from `frailty_variance`

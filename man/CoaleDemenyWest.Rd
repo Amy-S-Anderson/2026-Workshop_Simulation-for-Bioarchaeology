@@ -13,17 +13,17 @@
 \format{
 A data frame with 1 row and 6 columns.
 
-An object of class \code{data.frame} with 1 rows and 6 columns.
+An object of class \code{persephone_siler_regime} (inherits from \code{data.frame}) with 1 rows and 6 columns.
 
-An object of class \code{data.frame} with 1 rows and 6 columns.
+An object of class \code{persephone_siler_regime} (inherits from \code{data.frame}) with 1 rows and 6 columns.
 
-An object of class \code{data.frame} with 1 rows and 6 columns.
+An object of class \code{persephone_siler_regime} (inherits from \code{data.frame}) with 1 rows and 6 columns.
 
-An object of class \code{data.frame} with 1 rows and 6 columns.
+An object of class \code{persephone_siler_regime} (inherits from \code{data.frame}) with 1 rows and 6 columns.
 
-An object of class \code{data.frame} with 1 rows and 6 columns.
+An object of class \code{persephone_siler_regime} (inherits from \code{data.frame}) with 1 rows and 6 columns.
 
-An object of class \code{data.frame} with 1 rows and 6 columns.
+An object of class \code{persephone_siler_regime} (inherits from \code{data.frame}) with 1 rows and 6 columns.
 }
 \usage{
 CoaleDemenyWestF3

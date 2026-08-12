@@ -152,7 +152,7 @@ Simulate_Cemetery <- function(# Time arguments
     ages <- 0:110
     data.frame(
       age = ages,
-      mu0 = compute_siler_risk(ages, params$mortality_regime)
+      mu0 = compute_siler_risk(ages, mortality_regime)
     )
   }
   # Add a column to the age-based hazards lookup table detailing the proportion of deaths at each age due to trauma.
