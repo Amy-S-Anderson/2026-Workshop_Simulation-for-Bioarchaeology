@@ -1,3 +1,5 @@
+^renv$
+^renv\.lock$
 ^persephone\.Rproj$
 ^\.Rproj\.user$
 ^LICENSE\.md$

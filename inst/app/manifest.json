@@ -1511,37 +1511,22 @@
       "Repository": null,
       "description": {
         "Package": "persephone",
-        "Title": "Agent-Based Model for Simulating Skeletal Lesion Formation and\nMortality in Archaeological Populations",
+        "Title": "Agent-Based Model for Simulating Skeletal Lesion Formation and Mortality in Archaeological Populations",
         "Version": "0.0.0.9000",
-        "Authors@R": "c(\n    person(\"Amy\", \"Anderson\", , \"Amy.Anderson-1@colorado.edu\", role = c(\"aut\", \"cre\")),\n    person(\"Michael Holton\", \"Price\", role = \"ctb\"),\n    person(\"Nicolas\", \"Gauthier\", role = \"ctb\"),\n    person(\"Bret\", \"Beheim\", role = \"ctb\")\n    )",
-        "Description": "An agent-based model (ABM) for simulating skeletal assemblage\n    data in bioarchaeology. Individuals in a birth cohort face annual risks of\n    skeletal lesion formation and age-specific mortality following a Siler\n    hazard model. Lesion status can modify mortality risk, enabling\n    exploration of the osteological paradox and evaluation of survival\n    analysis methods applied to cemetery data.",
+        "Authors@R": "c(\nperson(\"Amy\", \"Anderson\", , \"Amy.Anderson-1@colorado.edu\", role = c(\"aut\", \"cre\")),\nperson(\"Michael Holton\", \"Price\", role = \"ctb\"),\nperson(\"Nicolas\", \"Gauthier\", role = \"ctb\"),\nperson(\"Bret\", \"Beheim\", role = \"ctb\")\n)",
+        "Description": "An agent-based model (ABM) for simulating skeletal assemblage\ndata in bioarchaeology. Individuals in a birth cohort face annual risks of\nskeletal lesion formation and age-specific mortality following a Siler\nhazard model. Lesion status can modify mortality risk, enabling\nexploration of the osteological paradox and evaluation of survival\nanalysis methods applied to cemetery data.",
         "License": "MIT + file LICENSE",
         "Encoding": "UTF-8",
         "Roxygen": "list(markdown = TRUE)",
         "RoxygenNote": "7.3.3",
-        "Imports": "data.table, demohaz, dplyr, doParallel, foreach, ggplot2,\nhere, jsonlite, magrittr, readr, survival",
-        "Suggests": "cowplot, knitr, rmarkdown, scales, shiny, testthat (>= 3.0.0)",
+        "Imports": "data.table,\ndemohaz,\ndplyr,\ndoParallel,\nforeach,\nggplot2,\nhere,\njsonlite,\nmagrittr,\nreadr,\nsurvival",
+        "Suggests": "cowplot,\nknitr,\nrmarkdown,\nscales,\nshiny,\ntestthat (>= 3.0.0)",
         "VignetteBuilder": "knitr",
         "Remotes": "MichaelHoltonPrice/demohaz",
         "Depends": "R (>= 3.5)",
         "LazyData": "true",
         "URL": "https://amy-s-anderson.github.io/persephone/",
-        "Config/testthat/edition": "3",
-        "RemoteType": "github",
-        "RemoteHost": "api.github.com",
-        "RemoteRepo": "persephone",
-        "RemoteUsername": "Amy-S-Anderson",
-        "RemoteRef": "HEAD",
-        "RemoteSha": "3927afafa6ac5b5b918a4295bdb6902e4fcc6537",
-        "GithubRepo": "persephone",
-        "GithubUsername": "Amy-S-Anderson",
-        "GithubRef": "HEAD",
-        "GithubSHA1": "3927afafa6ac5b5b918a4295bdb6902e4fcc6537",
-        "NeedsCompilation": "no",
-        "Packaged": "2026-08-12 05:02:53 UTC; amyanderson",
-        "Author": "Amy Anderson [aut, cre],\n  Michael Holton Price [ctb],\n  Nicolas Gauthier [ctb],\n  Bret Beheim [ctb]",
-        "Maintainer": "Amy Anderson <Amy.Anderson-1@colorado.edu>",
-        "Built": "R 4.5.2; ; 2026-08-12 05:02:54 UTC; unix"
+        "Config/testthat/edition": "3"
       }
     },
     "pillar": {
@@ -2285,16 +2270,7 @@
   },
   "files": {
     "app.R": {
-      "checksum": "a0c6cc85797c2b05fa18eefa1605d150"
-    },
-    "Paper - Persephone as an Andragogical Tool/Talk text - AABA - persephone as pedagogy.docx": {
-      "checksum": "eb7ff8fb6db7071de9a244bbef8a5c62"
-    },
-    "persephone_app.R": {
       "checksum": "0ef3f413596a464ac00a6160b2e7b480"
-    },
-    "persephone_shiny_app.R": {
-      "checksum": "a3c5b2c47155a8e9ea423c7984aa4c3d"
     }
   },
   "users": null

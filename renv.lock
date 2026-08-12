@@ -4566,6 +4566,53 @@
       "Author": "Ulrich Halekoh [aut, cph], Søren Højsgaard [aut, cre, cph]",
       "Repository": "CRAN"
     },
+    "persephone": {
+      "Package": "persephone",
+      "Version": "0.0.0.9000",
+      "Source": "GitHub",
+      "Title": "Agent-Based Model for Simulating Skeletal Lesion Formation and Mortality in Archaeological Populations",
+      "Authors@R": "c( person(\"Amy\", \"Anderson\", , \"Amy.Anderson-1@colorado.edu\", role = c(\"aut\", \"cre\")), person(\"Michael Holton\", \"Price\", role = \"ctb\"), person(\"Nicolas\", \"Gauthier\", role = \"ctb\"), person(\"Bret\", \"Beheim\", role = \"ctb\") )",
+      "Description": "An agent-based model (ABM) for simulating skeletal assemblage data in bioarchaeology. Individuals in a birth cohort face annual risks of skeletal lesion formation and age-specific mortality following a Siler hazard model. Lesion status can modify mortality risk, enabling exploration of the osteological paradox and evaluation of survival analysis methods applied to cemetery data.",
+      "License": "MIT + file LICENSE",
+      "Encoding": "UTF-8",
+      "Roxygen": "list(markdown = TRUE)",
+      "RoxygenNote": "7.3.3",
+      "Imports": [
+        "data.table",
+        "demohaz",
+        "dplyr",
+        "doParallel",
+        "foreach",
+        "ggplot2",
+        "here",
+        "jsonlite",
+        "magrittr",
+        "readr",
+        "survival"
+      ],
+      "Suggests": [
+        "cowplot",
+        "knitr",
+        "rmarkdown",
+        "scales",
+        "shiny",
+        "testthat (>= 3.0.0)"
+      ],
+      "VignetteBuilder": "knitr",
+      "Remotes": "MichaelHoltonPrice/demohaz",
+      "Depends": [
+        "R (>= 3.5)"
+      ],
+      "LazyData": "true",
+      "URL": "https://amy-s-anderson.github.io/persephone/",
+      "Config/testthat/edition": "3",
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteUsername": "Amy-S-Anderson",
+      "RemoteRepo": "persephone",
+      "RemoteRef": "main",
+      "RemoteSha": "b9eaf09e6acc9a244514d38f260e34c1f4cc3878"
+    },
     "pillar": {
       "Package": "pillar",
       "Version": "1.11.1",

@@ -8,6 +8,7 @@ src/*.dll
 # RStudio project files
 .Rproj.user/
 *.Rproj
+./inst/app/*.Rproj
 
 # R session/history
 .Rhistory
