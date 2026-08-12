@@ -1,0 +1,10 @@
+name: app
+title:
+username: amy-s-anderson
+account: amy-s-anderson
+server: connect.posit.cloud
+hostUrl: https://api.connect.posit.cloud/v1
+appId: 019ff614-abc2-1aab-7d84-c1c7270bc938
+bundleId:
+url: https://connect.posit.cloud/amy-s-anderson/content/019ff614-abc2-1aab-7d84-c1c7270bc938
+version: 1

@@ -1,40 +1,33 @@
 # =============================================================================
-# Persephone Shiny App — Minimal Starter Version
-# Agent-Based Model for Bioarchaeology
-# Anderson & DeWitte, "Known Unknowns and the Osteological Paradox"
+# Persephone Shiny App — Agent-Based Model for Bioarchaeology
+
+# Simulate, visualize, and explore bioarchaeological data 
+# Decide what population dynamics and post-mortem processes create the data
+
 # =============================================================================
 #
-# GOAL OF THIS SCRIPT:
-#   This is intentionally a *small* app. It exposes exactly ONE user-changeable
-#   parameter (starting population size) and uses persephone's own
-#   get_default_params() for everything else. Once this works and feels
-#   understandable, we can add more sliders/tabs one at a time.
-#
-# WHAT IS SHINY?
-#   A Shiny app has two main parts:
-#     1. ui     — defines what the user SEES: sliders, buttons, plots, tabs.
-#     2. server — defines what HAPPENS: takes user input, runs R code,
-#                  produces things (like plots) for the ui to display.
-#   At the bottom, shinyApp(ui, server) glues them together and launches it.
+# The persephone model first debuted in the 2025 article "Known Unknowns and the Osteological Paradox"
+# by Amy Anderson & Sharon DeWitte, (International Journal of Paleopathology).
+# It has since been expanded into the persephone R package (still in active development)
+# https://github.com/Amy-S-Anderson/persephone
 #
 # =============================================================================
+# load packages called by app script
 library(shiny)
 library(ggplot2)
 library(dplyr)
 library(survival)
 library(persephone)   # provides Simulate_Cemetery() and get_default_params()
 
-options(shiny.sanitize.errors = FALSE)
+# options(shiny.sanitize.errors = FALSE) # uncomment this during development to get more informative error messages
 
 # =============================================================================
 # Helper function: assign_age_interval()
 # -----------------------------------------------------------------------------
-# This isn't part of persephone — it's a small convenience function we write
-# ourselves to group individual ages-at-death into bioarchaeologically
-# meaningful bins (e.g. "0-1", "2-5", ...) for plotting. We define it here,
-# outside of ui and server, because both the Cemetery and Survival tabs may
-# want to use it, and it doesn't depend on any user input.
-# =============================================================================
+# This is a small convenience function to group individual ages-at-death into 
+# bioarchaeologically meaningful bins (e.g. "0-1", "2-5", ...) for plotting. 
+# We define it here, outside of ui and server, because both the Cemetery and 
+# Survival tabs may want to use it, and it doesn't depend on any user input.
 
 assign_age_interval <- function(age) {
   factor(
@@ -58,6 +51,16 @@ assign_age_interval <- function(age) {
   )
 }
 
+# =============================================================================
+# Helper functions: siler_survival(); life_expectancy_at_birth(); life_expectancy_at_age()
+# -----------------------------------------------------------------------------
+# These functions are called in the first tab of the app, Parameter Explanations, 
+# which is immediately reactive to changes in user-specified parameter values.
+# These functions provide summary insights into the characteristics of the selected
+# mortality regime. i.e., what does choosing the regime 'CoaleDemenyWest5' actually
+# mean for the population's mean age at death, chance of surviving childhood, and
+# adult life expectancy?
+
 # Siler survivorship function S(x): probability of surviving from birth to age x
 siler_survival <- function(age, params) {
   with(params, exp(-(
@@ -79,7 +82,11 @@ life_expectancy_at_age <- function(params, age, upper = 110) {
 }
 
 
-# A couple of colors we'll reuse across plots, so they stay consistent.
+# =============================================================================
+# Set available options for plot colors, mortality regime, and taphonomic loss.
+# -----------------------------------------------------------------------------
+
+# Plot colors called by all plots (consistent color key).
 col_no_lesion <- "#5B8DB8"   # blue
 col_lesion    <- "#CC6677"   # red
 col_dark      <- "#2c3e50"   # near-black
@@ -88,8 +95,11 @@ col_insample  <- "#44AA99"
 
 # options for mortality regimes, from persephone's pre-loaded library of mortality regimes
 regime_choices <- persephone::list_mortality_regimes()
-# options for post-mortem preservation/taphonomic loss regimes, from persephone's pre-loaded library of taphonomy regimes
-taphonomic_loss_choices <- persephone::list_taphonomy_regimes()
+
+# # options for post-mortem preservation/taphonomic loss regimes, from persephone's pre-loaded library of taphonomy regimes
+# taphonomic_loss_choices <- persephone::list_taphonomy_regimes()
+
+
 # =============================================================================
 # UI: what the user sees
 # =============================================================================
@@ -142,7 +152,7 @@ ui <- fluidPage(
       actionButton(
         inputId = "run",
         label   = "Run Simulation",
-        class   = "btn-primary",   # just a Bootstrap CSS class for blue styling
+        class   = "btn-primary"   # just a Bootstrap CSS class for blue styling
       ),
       
       ### Max Years to Run Simulation ###
@@ -188,6 +198,7 @@ ui <- fluidPage(
                   label = "Mortality regime",
                   choices = names(regime_choices), 
                   selected = "CoaleDemenyWestF5"),
+      div(class = "help-text", "For faster mortality schedules, choose regimes with lower numbers (fastest = 3; slowest = 21.)"),
       
       # ---- Skeletal Lesions -------------------------------------------------
       h4("Morbidity", class = "param-header"),
@@ -220,17 +231,17 @@ ui <- fluidPage(
       div(class = "help-text",
           "Individuals below this age are excluded from the cemetery."),
       
-      checkboxInput("enable_taphonomy", "Apply taphonomic loss", FALSE),
-      conditionalPanel(
-        condition = "input.enable_taphonomy == true",
-        div(class = "conditional-block",
-            selectInput("loss_strength", "Preservation Loss",
-                        choices = c("None" = "no_decay",
-                                    "Mild" = "weak_decay", 
-                                    "Moderate" = "moderate_decay",
-                                    "Severe" = "strong_decay"),
-                        selected = "moderate"))
-      ),
+      # checkboxInput("enable_taphonomy", "Apply taphonomic loss", FALSE),
+      # conditionalPanel(
+      #   condition = "input.enable_taphonomy == true",
+      #   div(class = "conditional-block",
+      #       selectInput("loss_strength", "Preservation Loss",
+      #                   choices = c("None" = "no_decay",
+      #                               "Mild" = "weak_decay", 
+      #                               "Moderate" = "moderate_decay",
+      #                               "Severe" = "strong_decay"),
+      #                   selected = "moderate"))
+      # ),
       
       checkboxInput("age_noise", "Add skeletal age estimation error", FALSE),
       div(class = "help-text",
@@ -240,7 +251,9 @@ ui <- fluidPage(
       # ---- Make Replicable (set seed) --------------------------------------------------------
       h4("Simulation", class = "param-header"),
       # Set seed for reproducible results:
-      numericInput("seed", "Random seed (blank = random)", 1, min = 1),
+      numericInput("seed", "Random seed (blank = random)", NA, min = 1),
+      div(class = "help-text",
+          "The model has some stochastic processes in it. To repeat exact results from the same parameters, use the same seed (starting value for the 'random walk' that operationalizes the stochastic processes.)")
     ),
       
 
@@ -253,7 +266,7 @@ ui <- fluidPage(
       tabsetPanel(
         id = "tabs", type = "tabs",
         tabPanel(
-          "Model Parameters",
+          "Model Overview",
         br(),
         uiOutput("param_explanation")
         ),
@@ -275,11 +288,9 @@ ui <- fluidPage(
            "Survival Analysis",
            br(),
            uiOutput("survival_ui")
-          # plotOutput("plot_km"),          # Kaplan-Meier survival curves
-          # br(),
-          # verbatimTextOutput("logrank_text")  # plain-text log-rank test result
         ),
         # ---- Tab 4: Multi-State Model Analysis -----------------------------------
+        # Still to come. 
         
         # ---- Tab 5: Survival Analysis -----------------------------------
         
@@ -307,6 +318,7 @@ ui <- fluidPage(
     )
   )
 )
+
     
 
 
@@ -334,8 +346,6 @@ server <- function(input, output, session) {
   # to create the set of parameter values that will be used by the ABM below,
   # overwrite specified parameters with the values chosen in the control panel.
   sim_params <- reactive({
-    # set a seed for start of stochastic processes. Necessary for replicable results. 
-    set.seed(input$seed)
     
     # Take persephone's defaults...
     sim_params <- params
@@ -423,18 +433,20 @@ server <- function(input, output, session) {
       if(p$deposition_param > 0){
         paste0("<p>Cultural influences determine who ends up in a cemetery. In this population, individuals who die at ages younger than ", bold(p$deposition_param), " years old are not deposited in the same burial context as the rest of the population.")
       },
-      if(input$enable_taphonomy && input$loss_strength != "no_decay"){
-        paste0("<p>Post-burial preservation of skeletal remains is rarely perfect. In this population the extent of post-burial/taphonomic loss is ",
-               bold(names(which(c("None"="no_decay","Mild"="weak_decay","Moderate"="moderate_decay","Severe"="strong_decay") == input$loss_strength))),
-               ". </p>")
-      },
+      # if(input$enable_taphonomy && input$loss_strength != "no_decay"){
+      #   paste0("<p>Post-burial preservation of skeletal remains is rarely perfect. In this population the extent of post-burial/taphonomic loss is ",
+      #          bold(names(which(c("None"="no_decay","Mild"="weak_decay","Moderate"="moderate_decay","Severe"="strong_decay") == input$loss_strength))),
+      #          ". </p>")
+      # },
       if(p$age_noise){
         paste0("<p>Data are the result of observation and measurement, and these are also rarely perfect. Some observation error has been added to the age-at-death data. But you will still be able to compare these simulated osteological age-at-death estimates to the true age-at-death values for individuals in this population. </p>")
       },
       "<br>",
-      italic("<p><b> A Note on Mortality:</b> Currently, each mortality regime option is a Siler mortality hazard function fit to one of Coale and Demeny’s West series of model life tables for females (Coale and Demeny, 1966; Gage and Dyke, 1986). Coale and Demeny’s regional model life tables were developed based on patterns of historic European mortality and have been widely used for estimating mortality in situations with sparse data.</p>"),
       "<br>",
-      italic("<p><b> A Note on Taphonomy:</b> Post-burial preservation loss is most marked in the oldest and youngest individuals in a cemetery. This pattern is qualitatively similar to mortality hazards, and has been operationalized here using Siler functions, like the mortality regimes.</p>")
+  
+      italic("<p><b> A Note on Mortality:</b> Currently, each mortality regime option is a Siler mortality hazard function fit to one of Coale and Demeny’s West series of model life tables for females (Coale and Demeny, 1966; Gage and Dyke, 1986). Coale and Demeny’s regional model life tables were developed based on patterns of historic European mortality and have been widely used for estimating mortality in situations with sparse data.</p>")
+      # "<br>",
+      # italic("<p><b> A Note on Taphonomy:</b> Post-burial preservation loss is most marked in the oldest and youngest individuals in a cemetery. This pattern is qualitatively similar to mortality hazards, and has been operationalized here using Siler functions, like the mortality regimes.</p>")
     ))
   })
   # ---------------------------------------------------------------------
@@ -458,15 +470,16 @@ server <- function(input, output, session) {
       )
     )
     # do.call() lets us call Simulate_Cemetery() using a *list* of named
-    # arguments, rather than typing every argument name by hand. Since
-    # sim_params already has the correct names (dx, max_years, pop0_size,
-    # tfr, mortality_regime, ...) matching Simulate_Cemetery's arguments,
+    # arguments, rather than typing every argument name by hand. 
     # this is equivalent to writing out all ~20 arguments explicitly.
     #
     # withProgress() just shows a small progress bar/message in the app
     # while the simulation runs, so the user knows something is happening.
     withProgress(message = "Running simulation...", value = 0.3, {
       print(str(sim_params()))
+      if(!is.na(input$seed)){ # if seed is NA (the default), R sets a random seed. 
+        set.seed(input$seed)
+      } 
       result <- do.call(Simulate_Cemetery, sim_params())
       setProgress(1)
     })
@@ -782,7 +795,7 @@ server <- function(input, output, session) {
             hr(),
             h4("Recovered Sample Only", style = "color: #44AA99;"),
             div(class = "help-text",
-                "Only individuals retained after deposition and taphonomy filters (in_sample == TRUE). ",
+                "Only individuals retained after deposition filters (in_sample == TRUE). ",
                 "Compare with the full sample above to see how post-mortem processes bias inference."),
             fluidRow(
               column(7, plotOutput("plot_km_insample", height = "420px")),
@@ -989,3 +1002,13 @@ server <- function(input, output, session) {
 }
 
 shinyApp(ui = ui, server = server)
+
+
+# =======================================================
+#### Developer notes to self:
+# When you get a sourcing error, try running
+# tryCatch(
+#   source("inst/app/app.R"),
+#   error = function(e) print(e)
+# )
+## to see the actual error message in R. 
